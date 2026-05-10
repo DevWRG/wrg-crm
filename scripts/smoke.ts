@@ -1098,6 +1098,71 @@ async function run() {
     check('login_success row has email + ip', success.rows[0]?.email === 'login@example.com');
   }
 
+  // 51. Setup status checks return per-integration health
+  console.log('\n[51] Setup status: integration health checks');
+  {
+    const { checkAll } = await import('../src/setup/status.js');
+    const rows = await checkAll();
+    check('6 health checks returned', rows.length === 6);
+    check('PostgreSQL check exists', rows.some((r) => r.label === 'PostgreSQL'));
+    check('PostgreSQL is OK', rows.find((r) => r.label === 'PostgreSQL')?.ok === true);
+    check('all checks have detail string', rows.every((r) => typeof r.detail === 'string' && r.detail.length > 0));
+  }
+
+  // 52. Master user CRUD via setup module
+  console.log('\n[52] Master user CRUD: create / validate / duplicate / toggle');
+  {
+    const { listAms, createAm, toggleAmAktif, validateAmInput } =
+      await import('../src/setup/users.js');
+
+    // Validation
+    check('reject empty wa_number', typeof validateAmInput({ wa_number: '', nama_am: 'x' }) === 'string');
+    check('reject non-digit wa_number', typeof validateAmInput({ wa_number: 'abc', nama_am: 'x' }) === 'string');
+    check('reject short name', typeof validateAmInput({ wa_number: '6281234567890', nama_am: 'x' }) === 'string');
+    check('reject bad role', typeof validateAmInput({ wa_number: '6281234567890', nama_am: 'OK', role: 'WHAT' }) === 'string');
+    check('accept valid input', validateAmInput({ wa_number: '6281234567890', nama_am: 'Valid AM', area: 'Bali' }) === null);
+
+    // Create
+    await query(`DELETE FROM master_user WHERE wa_number = '6289999999991'`);
+    const r1 = await createAm({ wa_number: '6289999999991', nama_am: 'Test Setup AM', area: 'Bali', role: 'AM' });
+    check('create returns AM row', 'id' in r1 && r1.wa_number === '6289999999991');
+
+    // Duplicate detection
+    const r2 = await createAm({ wa_number: '6289999999991', nama_am: 'Duplicate' });
+    check('duplicate wa_number rejected', 'error' in r2 && /sudah terdaftar/.test(r2.error));
+
+    // List
+    const all = await listAms();
+    check('listAms returns at least the seed + new', all.length >= 4);
+    check('list includes our new AM', all.some((a) => a.wa_number === '6289999999991'));
+    check('list has visits_30d field', all.every((a) => typeof a.visits_30d === 'number'));
+
+    // Toggle aktif
+    const newAm = all.find((a) => a.wa_number === '6289999999991')!;
+    const tog1 = await toggleAmAktif(newAm.id, false);
+    check('toggle off ok', tog1.ok === true);
+    const togRow = await query<{ aktif: boolean }>(`SELECT aktif FROM master_user WHERE id = $1`, [newAm.id]);
+    check('aktif now false', togRow.rows[0]?.aktif === false);
+    const tog2 = await toggleAmAktif(999999, true);
+    check('toggle non-existent returns error', tog2.ok === false);
+  }
+
+  // 53. Env reader masks secrets
+  console.log('\n[53] readEnvSections masks secrets, groups by section');
+  {
+    const { readEnvSections } = await import('../src/setup/env.js');
+    const sections = await readEnvSections('.env');
+    check('at least 1 section parsed', sections.length >= 1);
+    const allEntries = sections.flatMap((s) => s.entries);
+    const tokenEntry = allEntries.find((e) => e.key === 'DASHBOARD_TOKEN');
+    if (tokenEntry) {
+      check('DASHBOARD_TOKEN marked masked', tokenEntry.masked === true);
+      check('DASHBOARD_TOKEN value contains bullet', tokenEntry.value.includes('•') || tokenEntry.value === '(kosong)');
+    }
+    const pgEntry = allEntries.find((e) => e.key === 'PGUSER');
+    check('PGUSER not masked (non-secret)', !pgEntry || pgEntry.masked === false);
+  }
+
   // 50. buildAuthorizeUrl includes required OAuth params
   console.log('\n[50] buildAuthorizeUrl includes required OAuth params');
   {

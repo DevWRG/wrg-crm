@@ -47,6 +47,11 @@ import {
   verifyAccess,
 } from './auth/google.js';
 import { renderLoginPage } from './auth/pages.js';
+import { SETUP_HTML } from './setup/page.js';
+import { checkAll } from './setup/status.js';
+import { readEnvSections } from './setup/env.js';
+import { listAms, createAm, toggleAmAktif, type CreateAmInput } from './setup/users.js';
+import { testWaSend, testAlertChannels, testEmailDigest, testOAuthConfig } from './setup/tests.js';
 import type { InboundMessage } from './types.js';
 
 // In-memory CSRF state store for OAuth flow (single-instance OK).
@@ -163,6 +168,72 @@ app.get('/dashboard', async (req, reply) => {
   const ctx = await requireAuth(req, reply, 'page');
   if (!ctx) return;
   reply.type('text/html; charset=utf-8').send(DASHBOARD_HTML);
+});
+
+// ── Setup page (HTML) ─────────────────────────────────────────────────────
+app.get('/setup', async (req, reply) => {
+  const ctx = await requireAuth(req, reply, 'page');
+  if (!ctx) return;
+  reply.type('text/html; charset=utf-8').send(SETUP_HTML);
+});
+
+app.get('/api/setup/status', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  const rows = await checkAll();
+  return reply.send({ ok: true, rows });
+});
+
+app.get('/api/setup/env', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  const sections = await readEnvSections();
+  return reply.send({ ok: true, sections });
+});
+
+app.get('/api/setup/users', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  const rows = await listAms();
+  return reply.send({ ok: true, rows });
+});
+
+app.post<{ Body: CreateAmInput }>('/api/setup/users', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  const r = await createAm(req.body || ({} as CreateAmInput));
+  if ('error' in r) return reply.status(400).send({ ok: false, error: r.error });
+  return reply.send({ ok: true, row: r });
+});
+
+app.patch<{ Params: { id: string }; Body: { aktif: boolean } }>(
+  '/api/setup/users/:id',
+  async (req, reply) => {
+    if (!(await requireDashboardToken(req, reply))) return;
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      return reply.status(400).send({ ok: false, error: 'invalid id' });
+    }
+    const r = await toggleAmAktif(id, Boolean(req.body?.aktif));
+    if (!r.ok) return reply.status(404).send({ ok: false, error: r.error });
+    return reply.send({ ok: true });
+  },
+);
+
+app.post('/api/setup/test/wa', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  return reply.send(await testWaSend());
+});
+
+app.post('/api/setup/test/alert', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  return reply.send(await testAlertChannels());
+});
+
+app.post('/api/setup/test/email', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  return reply.send(await testEmailDigest());
+});
+
+app.post('/api/setup/test/oauth', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  return reply.send(testOAuthConfig());
 });
 
 app.get('/api/overview', async (req, reply) => {

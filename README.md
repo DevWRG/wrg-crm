@@ -71,6 +71,11 @@ Server listen di `http://localhost:3000` dengan endpoint:
 - `GET /auth/google/callback` — OAuth callback (Google → app)
 - `POST /auth/logout` — destroy session + clear cookie
 - `GET /api/me` — current user info (untuk dashboard)
+- `GET /setup` — setup helper page (HTML, auth-protected)
+- `GET /api/setup/status` — integration health checks
+- `GET /api/setup/env` — masked .env viewer
+- `GET|POST|PATCH /api/setup/users` — master_user CRUD
+- `POST /api/setup/test/(wa|alert|email|oauth)` — fire test integration
 
 Selain itu **scheduler** ikut start otomatis (zona `Asia/Jakarta`):
 - `0 18 * * 1-6` → kirim daily summary ke `WA_HOD_GROUP_ID`
@@ -245,6 +250,12 @@ src/
     session.ts         create/find/destroy session + auth_log
     middleware.ts      requireAuth() cookie OR token
     pages.ts           login page HTML
+  setup/
+    status.ts          integration health checks
+    env.ts             .env reader with secret masking
+    users.ts           master_user CRUD + validation
+    tests.ts           fire test for WA/alert/email/oauth
+    page.ts            setup HTML page (5 sections)
   handlers/
     plan.ts
     report.ts

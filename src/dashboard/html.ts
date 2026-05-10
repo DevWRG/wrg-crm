@@ -93,6 +93,7 @@ export const DASHBOARD_HTML = `<!DOCTYPE html>
     <span><span id="health-dot" class="dot"></span> <span id="health-text">checking…</span></span>
     <span id="last-refresh">—</span>
     <button class="refresh" id="refresh-btn">↻ Refresh</button>
+    <a class="refresh" href="/setup" style="text-decoration:none">⚙ Setup</a>
     <form method="POST" action="/auth/logout" style="margin:0">
       <button class="refresh" type="submit" id="logout-btn" style="display:none">Logout</button>
     </form>
