@@ -1,0 +1,36 @@
+{
+  "name": "wrg-crm-openclaw",
+  "version": "0.1.0",
+  "description": "WRG CRM Assistant — WhatsApp hashtag handlers on OpenClaw Gateway",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "summary:run": "tsx scripts/summary-run.ts",
+    "gateway:stub": "tsx scripts/wa-stub-server.ts",
+    "alert:stub": "tsx scripts/alert-stub.ts",
+    "db:init": "psql -U wrg_admin -h localhost -d wrg_crm -f db/001_init.sql",
+    "db:seed": "psql -U wrg_admin -h localhost -d wrg_crm -f db/002_seed.sql",
+    "db:migrate": "psql -U wrg_admin -h localhost -d wrg_crm -f db/003_processed_message.sql && psql -U wrg_admin -h localhost -d wrg_crm -f db/004_delivery_log.sql && psql -U wrg_admin -h localhost -d wrg_crm -f db/005_delivery_resend.sql && psql -U wrg_admin -h localhost -d wrg_crm -f db/006_alert_log.sql && psql -U wrg_admin -h localhost -d wrg_crm -f db/007_email_log.sql && psql -U wrg_admin -h localhost -d wrg_crm -f db/008_alert_escalation.sql && psql -U wrg_admin -h localhost -d wrg_crm -f db/009_user_session.sql",
+    "db:reset": "psql -d postgres -c 'DROP DATABASE IF EXISTS wrg_crm' && psql -d postgres -c 'CREATE DATABASE wrg_crm OWNER wrg_admin' && npm run db:init && npm run db:migrate && npm run db:seed"
+  },
+  "dependencies": {
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.0",
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.7",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
