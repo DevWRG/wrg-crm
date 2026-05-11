@@ -1277,7 +1277,9 @@ async function run() {
   console.log('\n[53] readEnvSections masks secrets, groups by section');
   {
     const { readEnvSections } = await import('../src/setup/env.js');
-    const sections = await readEnvSections('.env');
+    const { existsSync } = await import('node:fs');
+    const envPath = existsSync('.env') ? '.env' : '.env.example';
+    const sections = await readEnvSections(envPath);
     check('at least 1 section parsed', sections.length >= 1);
     const allEntries = sections.flatMap((s) => s.entries);
     const tokenEntry = allEntries.find((e) => e.key === 'DASHBOARD_TOKEN');
