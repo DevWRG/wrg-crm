@@ -8,6 +8,7 @@ import { query } from '../db.js';
 import { formatDateId } from '../util/dateid.js';
 import { fetchSummary } from '../summary/queries.js';
 import { exportPipeline } from './queries.js';
+import { ask, isConfigured as llmConfigured } from '../llm/openrouter.js';
 
 function esc(s: unknown): string {
   if (s === null || s === undefined) return '';
@@ -18,6 +19,93 @@ function esc(s: unknown): string {
 
 function pillFor(status: string): string {
   return `<span class="pill ${status.toLowerCase()}">${esc(status)}</span>`;
+}
+
+interface WeeklyContext {
+  weekStart: string;
+  weekEnd: string;
+  totalVisits: number;
+  totalPlans: number;
+  totalAmRoster: number;
+  avgActiveAm: number;
+  totalRevenue: number;
+  dayRange: Array<{ tanggal: string; visits: number; plans: number; active_am: number }>;
+  perAm: Array<{ nama_am: string; area: string | null; visits: number; plans: number }>;
+  closed: Array<{ customer_name: string; nama_am: string; nilai_deal: string | null }>;
+  hotDeals: Array<{ customer_name: string; nama_am: string; stage: number; status: string; produk: string | null }>;
+}
+
+/** Template fallback executive summary kalau LLM mati. */
+function weeklyNarrativeTemplate(ctx: WeeklyContext): string {
+  const coverage = ctx.totalPlans > 0 ? Math.round((ctx.totalVisits / ctx.totalPlans) * 100) : 0;
+  const engagementPct = ctx.totalAmRoster > 0 ? Math.round((ctx.avgActiveAm / ctx.totalAmRoster) * 100) : 0;
+  const parts: string[] = [];
+
+  parts.push(`Minggu ini tim mencatat ${ctx.totalVisits} kunjungan dari ${ctx.totalPlans} plan (coverage ${coverage}%) dengan rata-rata ${ctx.avgActiveAm}/${ctx.totalAmRoster} AM aktif per hari (${engagementPct}%).`);
+
+  if (ctx.closed.length > 0) {
+    parts.push(`${ctx.closed.length} deal closed senilai total ${ctx.totalRevenue.toLocaleString('id-ID')}.`);
+  } else {
+    parts.push('Belum ada deal closed minggu ini.');
+  }
+
+  if (ctx.hotDeals.length > 0) {
+    parts.push(`${ctx.hotDeals.length} deal berada di pipeline panas (stage ≥ 3 atau Hot) — perlu follow-up minggu depan.`);
+  }
+
+  return parts.join(' ');
+}
+
+/** AI-powered executive summary via OpenRouter. Fallback ke template. */
+async function weeklyNarrativeAi(ctx: WeeklyContext): Promise<string> {
+  if (!llmConfigured()) return weeklyNarrativeTemplate(ctx);
+
+  const dailyTable = ctx.dayRange
+    .map((d) => `${d.tanggal}: ${d.visits}v/${d.plans}p (${d.active_am} AM aktif)`)
+    .join(' | ');
+  const perAmList = ctx.perAm
+    .map((a) => `${a.nama_am} [${a.area ?? '-'}]: ${a.visits}v/${a.plans}p`)
+    .join(', ');
+  const closedList = ctx.closed.length
+    ? ctx.closed.map((c) => `${c.customer_name} (${c.nama_am})${c.nilai_deal ? ' Rp ' + c.nilai_deal : ''}`).join(', ')
+    : '(tidak ada)';
+  const hotList = ctx.hotDeals.length
+    ? ctx.hotDeals.slice(0, 8).map((h) => `${h.customer_name} stage ${h.stage} ${h.status} (${h.nama_am})`).join(', ')
+    : '(tidak ada)';
+
+  const userPrompt = `Range minggu: ${ctx.weekStart} → ${ctx.weekEnd}
+
+KPI:
+- Total Visits: ${ctx.totalVisits}
+- Total Plans: ${ctx.totalPlans}
+- AM Roster: ${ctx.totalAmRoster}, avg aktif per hari: ${ctx.avgActiveAm}
+- Revenue closed: ${ctx.totalRevenue}
+
+Daily breakdown: ${dailyTable}
+
+Per-AM minggu ini: ${perAmList}
+
+Deals closed: ${closedList}
+
+Hot pipeline (stage ≥ 3 atau Hot): ${hotList}`;
+
+  const result = await ask({
+    system:
+      'Kamu adalah Sales Operations Analyst untuk WRG CRM. Tulis Executive Summary mingguan dalam Bahasa Indonesia ' +
+      'untuk Head of Department dan jajaran direksi. Struktur paragraf: 3-5 kalimat yang mencakup ' +
+      '(1) penilaian performa tim minggu ini secara overall, ' +
+      '(2) highlight wins (deal closed, hot pipeline movement, AM top performer), ' +
+      '(3) area concern (AM underperform, plan terlewat, deal stuck), ' +
+      '(4) rekomendasi strategis untuk minggu depan. ' +
+      'Tone profesional, actionable, sebut nama AM dan customer spesifik. Maksimal 130 kata. ' +
+      'Output: paragraf polos tanpa bullet/header/list — narasi mengalir.',
+    user: userPrompt,
+    temperature: 0.5,
+    maxTokens: 350,
+  });
+
+  if (!result.ok || !result.text) return weeklyNarrativeTemplate(ctx);
+  return result.text;
 }
 
 export async function renderWeeklyDigest(weekStart: string, weekEnd: string): Promise<string> {
@@ -106,6 +194,18 @@ export async function renderWeeklyDigest(weekStart: string, weekEnd: string): Pr
     0,
   );
 
+  // Generate executive summary (LLM + fallback)
+  const executiveSummary = await weeklyNarrativeAi({
+    weekStart, weekEnd,
+    totalVisits, totalPlans,
+    totalAmRoster: todaySummary.totalAmRoster,
+    avgActiveAm, totalRevenue,
+    dayRange: dayRange.rows,
+    perAm: perAm.rows.map((a) => ({ nama_am: a.nama_am, area: a.area, visits: a.visits, plans: a.plans })),
+    closed: closed.rows.map((c) => ({ customer_name: c.customer_name, nama_am: c.nama_am, nilai_deal: c.nilai_deal })),
+    hotDeals: pipelineHot.map((p) => ({ customer_name: p.customer_name, nama_am: p.nama_am, stage: p.stage, status: p.status, produk: p.produk })),
+  });
+
   const dayHtml = dayRange.rows
     .map((d) => {
       const cov = d.plans > 0 ? Math.round((d.visits / d.plans) * 100) : 0;
@@ -137,6 +237,9 @@ export async function renderWeeklyDigest(weekStart: string, weekEnd: string): Pr
         )
         .join('')
     : `<tr><td colspan="5" class="empty">Tidak ada deal panas di pipeline</td></tr>`;
+
+  const summaryHtml = `<h2>Executive Summary</h2>
+<p style="background:#f7f7f7;border-left:3px solid #444;padding:10px 14px;margin:8px 0 16px;line-height:1.6">${esc(executiveSummary)}</p>`;
 
   return `<!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8"><title>WRG Weekly Digest ${weekStart} → ${weekEnd}</title>
@@ -179,6 +282,8 @@ export async function renderWeeklyDigest(weekStart: string, weekEnd: string): Pr
   <div class="kpi"><div class="label">Avg Active AM/day</div><div class="val">${avgActiveAm}/${todaySummary.totalAmRoster}</div></div>
   <div class="kpi"><div class="label">Revenue (closed)</div><div class="val">${totalRevenue ? totalRevenue.toLocaleString('id-ID') : '—'}</div></div>
 </div>
+
+${summaryHtml}
 
 <h2>Daily Breakdown</h2>
 <table><thead><tr><th>Tanggal</th><th>Active AM</th><th>Visits</th><th>Plans</th><th>Coverage</th></tr></thead><tbody>${dayHtml}</tbody></table>

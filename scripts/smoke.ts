@@ -766,6 +766,9 @@ async function run() {
     const html = await renderWeeklyDigest('2026-05-04', '2026-05-10');
     check('contains DOCTYPE', html.startsWith('<!DOCTYPE html>'));
     check('contains title', html.includes('WRG Weekly Digest'));
+    check('has Executive Summary section', html.includes('Executive Summary'));
+    check('exec summary appears before Daily Breakdown',
+      html.indexOf('Executive Summary') < html.indexOf('Daily Breakdown'));
     check('has Daily Breakdown section', html.includes('Daily Breakdown'));
     check('has Per-AM section', html.includes('Per-AM'));
     check('has Hot Pipeline section', html.includes('Hot Pipeline'));
