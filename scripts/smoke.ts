@@ -1137,6 +1137,75 @@ async function run() {
     check('still contains KPI structure', out.includes('Total Kunjungan: 5'));
   }
 
+  // 57. Freeform classifier pre-filter heuristic
+  console.log('\n[57] Classifier pre-filter (shouldClassify heuristic)');
+  {
+    const { shouldClassify, isConfirmReplyPattern } = await import('../src/handlers/classifier.js');
+    check('reject short message',
+      shouldClassify('ok') === false);
+    check('reject no sales keyword (under-length too)',
+      shouldClassify('lagi nonton bola gais') === false);
+    check('accept long w/ sales keyword',
+      shouldClassify('tadi kunjungan ke RS Husada Utama, dokter setuju harga') === true);
+    check('reject hashtag prefix',
+      shouldClassify('#REPORT\ncust: x\nhasil: y\nnext: z') === false);
+    check('reject confirm reply pattern',
+      shouldClassify('YA') === false);
+    check('isConfirmReplyPattern: ya', isConfirmReplyPattern('YA') === true);
+    check('isConfirmReplyPattern: iya', isConfirmReplyPattern('iya') === true);
+    check('isConfirmReplyPattern: sip', isConfirmReplyPattern('sip') === true);
+    check('isConfirmReplyPattern: tidak ke-trigger oleh non-confirm', isConfirmReplyPattern('halo') === false);
+  }
+
+  // 58. buildHashtagFromIntent: assembly fields → hashtag text
+  console.log('\n[58] buildHashtagFromIntent assembles fields correctly');
+  {
+    const { buildHashtagFromIntent } = await import('../src/handlers/classifier.js');
+    const planText = buildHashtagFromIntent({
+      intent: 'PLAN', confidence: 0.9,
+      fields: { tgl: '12/05/2026', cust: 'RS X', tujuan: 'Demo', goal: 'demo USG' },
+      reasoning: 'test',
+    });
+    check('PLAN: contains all fields',
+      !!planText && planText.includes('#PLAN') && planText.includes('tgl: 12/05/2026') &&
+      planText.includes('cust: RS X') && planText.includes('tujuan: Demo'));
+
+    const reportText = buildHashtagFromIntent({
+      intent: 'REPORT', confidence: 0.8,
+      fields: { cust: 'RS Y', hasil: 'sukses', next: 'follow up' },
+      reasoning: '',
+    });
+    check('REPORT: built correctly',
+      !!reportText && reportText.includes('#REPORT') && reportText.includes('cust: RS Y'));
+
+    // Missing required field
+    const incomplete = buildHashtagFromIntent({
+      intent: 'LEADS', confidence: 0.7,
+      fields: { cust: 'RS Z' }, // missing pic, tipe, produk, info
+      reasoning: '',
+    });
+    check('LEADS missing required → null', incomplete === null);
+
+    // NONE intent
+    const none = buildHashtagFromIntent({
+      intent: 'NONE', confidence: 0, fields: {}, reasoning: '',
+    });
+    check('NONE → null', none === null);
+  }
+
+  // 59. tryClassifyAndSuggest: disabled by config → returns null
+  console.log('\n[59] tryClassifyAndSuggest respects config flag');
+  {
+    const { tryClassifyAndSuggest } = await import('../src/handlers/classifier.js');
+    const { config } = await import('../src/config.js');
+    const savedEnabled = config.llm.freeformParserEnabled;
+    config.llm.freeformParserEnabled = false;
+    const fakeUser = { id: 1, wa_number: '628X', nama_am: 'Test', area: 'X', role: 'AM', aktif: true } as any;
+    const r = await tryClassifyAndSuggest(fakeUser, 'tadi kunjungan ke RS Husada Utama, dokter sangat tertarik');
+    check('disabled → null', r === null);
+    config.llm.freeformParserEnabled = savedEnabled;
+  }
+
   // 56. (Optional) Real LLM call — only runs if OPENROUTER_API_KEY set
   console.log('\n[56] LLM: real ping (skipped if no API key)');
   {

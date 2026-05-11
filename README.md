@@ -259,6 +259,8 @@ src/
   llm/
     openrouter.ts      OpenRouter chat-completion client (timeout + fallback)
   handlers/
+    classifier.ts      LLM freeform → intent classifier + suggest flow
+  handlers/
     plan.ts
     report.ts
     leads.ts
@@ -509,6 +511,42 @@ LLM:
 
 LLM versi lebih actionable, sebut nama specific, terbaca seperti briefing
 exec — bukan template angka.
+
+**2. Weekly digest Executive Summary** — section paling atas (setelah KPI)
+di `/export/digest` HTML, 3-5 kalimat menutup penilaian + wins + concerns
++ rekomendasi untuk minggu depan.
+
+**3. Freeform message classifier** — pesan non-hashtag dari AM yang
+registered di-classify sebagai intent #PLAN/#REPORT/#LEADS/#UPDATE. Kalau
+confidence ≥ 0.65 dan fields cukup, fire suggestion ke group:
+
+```
+AM: "tadi siang gue kunjungan ke RS Pelita Sehat, dokter Hadi sangat
+     tertarik dengan demo MRI 1.5T. Minggu depan follow up tim procurement."
+
+Bot (ke group):
+💡 Sepertinya ini mau di-#REPORT (85% yakin)
+👤 RS Pelita Sehat
+✅ dokter Hadi sangat tertarik dengan demo MRI 1.5T
+➡️ follow up dengan tim procurement mereka
+Reply *YA* untuk konversi otomatis, atau abaikan (expired 10 menit).
+
+AM: YA
+
+Bot (ke group):
+✅ *#REPORT diterima!*
+👤 Andi Pratama  |  📅 11 Mei 2026  |  1 kunjungan
+  • RS Pelita Sehat: dokter Hadi sangat tertarik…
+```
+
+Pre-filter heuristic skip LLM call kalau:
+- Pesan < 25 char (chit-chat / emoji)
+- Hashtag prefix (already handled by main parser)
+- Confirm reply pattern (YA/IYA/SIP/OK)
+- Tidak ada sales keyword (kunjungan, dokter, RS, demo, lead, dll.)
+
+**Default disabled** via `LLM_FREEFORM_PARSER_ENABLED=false` di .env — opt-in untuk
+hemat cost. Aktifkan saat AMs sudah siap pilot.
 
 ## Authentication
 

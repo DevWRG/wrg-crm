@@ -7,6 +7,7 @@ import { handlePlan } from './handlers/plan.js';
 import { handleReport } from './handlers/report.js';
 import { handleLeads } from './handlers/leads.js';
 import { handleUpdate, tryHandleConfirmReply } from './handlers/update.js';
+import { tryClassifyAndSuggest, tryHandleSuggestReply } from './handlers/classifier.js';
 import { resolveTarget, sendReply, type SentReply } from './wa.js';
 import type { HandlerResult, Hashtag, InboundMessage } from './types.js';
 
@@ -125,11 +126,77 @@ export async function processInbound(msg: InboundMessage): Promise<ProcessOutcom
       }
       return { ignored: false, hashtag: '#UPDATE', result: confirmRes, sent };
     }
+
+    // Pre-empt: freeform suggest replies (YA/IYA/SIP against #SUGGEST pending)
+    const suggestRes = await tryHandleSuggestReply(user, text);
+    if (suggestRes) {
+      const auditId = await writeAudit({
+        waNumber: msg.from,
+        namaAm: user.nama_am,
+        hashtag: '#SUGGEST',
+        status: suggestRes.status,
+        customerCount: suggestRes.customerCount,
+        payload: suggestRes.payload,
+        errorDetail: suggestRes.error,
+      });
+      const sent = await Promise.all(
+        suggestRes.replies.map((r) => sendReply(resolveTarget(r, ctx))),
+      );
+      await writeDeliveries(
+        sent.map((s) => ({
+          auditId,
+          source: 'inbound',
+          messageIdIn: msg.messageId ?? null,
+          waNumber: msg.from,
+          sent: s,
+        })),
+      );
+      if (msg.messageId) {
+        await finishMessage(msg.messageId, '#SUGGEST', suggestRes.status, {
+          suggestReply: true,
+          deliveredAll: sent.every((s) => s.delivered),
+        });
+      }
+      return { ignored: false, hashtag: '#SUGGEST', result: suggestRes, sent };
+    }
   }
 
   // Step 2: detect command
   const hashtag = detectHashtag(text);
   if (!hashtag) {
+    // Last chance: freeform classifier (LLM). Suggestion → group, AM reply YA → execute.
+    if (user) {
+      const suggestion = await tryClassifyAndSuggest(user, text);
+      if (suggestion) {
+        const auditId = await writeAudit({
+          waNumber: msg.from,
+          namaAm: user.nama_am,
+          hashtag: '#SUGGEST',
+          status: suggestion.status,
+          customerCount: suggestion.customerCount,
+          payload: suggestion.payload,
+        });
+        const sent = await Promise.all(
+          suggestion.replies.map((r) => sendReply(resolveTarget(r, ctx))),
+        );
+        await writeDeliveries(
+          sent.map((s) => ({
+            auditId,
+            source: 'inbound',
+            messageIdIn: msg.messageId ?? null,
+            waNumber: msg.from,
+            sent: s,
+          })),
+        );
+        if (msg.messageId) {
+          await finishMessage(msg.messageId, '#SUGGEST', suggestion.status, {
+            classifier: true,
+            deliveredAll: sent.every((s) => s.delivered),
+          });
+        }
+        return { ignored: false, hashtag: '#SUGGEST', result: suggestion, sent };
+      }
+    }
     if (msg.messageId) await finishMessage(msg.messageId, null, 'IGNORED', {});
     return { ignored: true, sent: [] };
   }

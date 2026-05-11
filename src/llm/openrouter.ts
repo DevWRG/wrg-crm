@@ -127,3 +127,28 @@ export async function ask(opts: {
     maxTokens: opts.maxTokens,
   });
 }
+
+/**
+ * Ask + parse JSON. Strips ```json fences kalau LLM bandel. Return null
+ * di json kalau parse gagal — caller decide what to do.
+ */
+export async function askJson<T = unknown>(opts: {
+  system?: string;
+  user: string;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}): Promise<CompletionResult & { json: T | null }> {
+  const r = await ask(opts);
+  if (!r.ok) return { ...r, json: null };
+  let raw = r.text.trim();
+  // Strip ```json ... ``` fences if present
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fence) raw = fence[1].trim();
+  try {
+    const json = JSON.parse(raw) as T;
+    return { ...r, json };
+  } catch {
+    return { ...r, json: null };
+  }
+}

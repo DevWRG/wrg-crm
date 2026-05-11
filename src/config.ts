@@ -44,6 +44,10 @@ export const config = {
     /** Optional referer + title untuk OpenRouter analytics. */
     referer: process.env.OPENROUTER_REFERER || 'https://github.com/DevWRG/wrg-crm',
     appTitle: process.env.OPENROUTER_APP_TITLE || 'WRG CRM',
+    /** Aktifkan classifier untuk pesan non-hashtag (freeform → suggested hashtag). */
+    freeformParserEnabled: process.env.LLM_FREEFORM_PARSER_ENABLED === 'true',
+    /** Confidence threshold untuk fire suggestion (default 0.65). */
+    freeformConfidence: parseFloat(process.env.LLM_FREEFORM_CONFIDENCE || '0.65'),
   },
   auth: {
     googleClientId: process.env.OAUTH_GOOGLE_CLIENT_ID || '',
