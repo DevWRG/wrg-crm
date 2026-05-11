@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Typecheck + smoke (192 checks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wrg_admin
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: wrg_crm
+        ports:
+          - 5432:5432
+        # Wait until postgres accepts connections before next steps run.
+        options: >-
+          --health-cmd "pg_isready -U wrg_admin -d wrg_crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: wrg_admin
+      PGPASSWORD: ci_test_password
+      PGDATABASE: wrg_crm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply schema (001) + migrations (003-009) + seed (002)
+        run: |
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/001_init.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/003_processed_message.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/004_delivery_log.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/005_delivery_resend.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/006_alert_log.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/007_email_log.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/008_alert_escalation.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/009_user_session.sql
+          psql -h localhost -U wrg_admin -d wrg_crm -f db/002_seed.sql
+
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Smoke tests (192 end-to-end checks)
+        run: npm run smoke
