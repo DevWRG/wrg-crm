@@ -26,7 +26,7 @@ export async function runDailySummary(
 ): Promise<SummaryRunResult> {
   const tanggal = date ?? todayWib();
   const data = await fetchSummary(tanggal);
-  const text = renderDailySummary(data);
+  const text = await renderDailySummary(data);
   const sent = await sendReply({
     to: 'group',
     target: config.wa.hodGroupId,

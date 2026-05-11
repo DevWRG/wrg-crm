@@ -8,6 +8,7 @@
 import { query } from '../db.js';
 import { config } from '../config.js';
 import { isConfigured as googleConfigured } from '../auth/google.js';
+import { isConfigured as llmConfigured } from '../llm/openrouter.js';
 
 export interface CheckResult {
   ok: boolean | null;
@@ -137,7 +138,22 @@ export function checkDashboardToken(): CheckResult {
   };
 }
 
+export function checkLlm(): CheckResult {
+  if (!llmConfigured()) {
+    return {
+      ok: null,
+      label: 'AI / LLM (OpenRouter)',
+      detail: 'OPENROUTER_API_KEY kosong — narrative fallback ke template',
+    };
+  }
+  return {
+    ok: true,
+    label: 'AI / LLM (OpenRouter)',
+    detail: `model=${config.llm.model} • timeout=${config.llm.timeoutMs}ms`,
+  };
+}
+
 export async function checkAll(): Promise<CheckResult[]> {
   const db = await checkDb();
-  return [db, checkWaGateway(), checkEmail(), checkAlerts(), checkOAuth(), checkDashboardToken()];
+  return [db, checkWaGateway(), checkEmail(), checkAlerts(), checkOAuth(), checkLlm(), checkDashboardToken()];
 }

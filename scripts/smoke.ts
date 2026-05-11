@@ -1098,12 +1098,66 @@ async function run() {
     check('login_success row has email + ip', success.rows[0]?.email === 'login@example.com');
   }
 
+  // ── LLM tests (require OPENROUTER_API_KEY; skip gracefully if absent) ──
+  console.log('\n[54] LLM client: isConfigured + graceful fallback');
+  {
+    const { isConfigured } = await import('../src/llm/openrouter.js');
+    const { narrativeTemplate } = await import('../src/summary/format.js');
+    const dummy = {
+      tanggal: '2026-05-11',
+      totalAmRoster: 3,
+      activeTeamCount: 0,
+      totalVisits: 0,
+      totalPlans: 0,
+      coveragePct: 0,
+      hotDeals: [], needAttention: [], topPerformers: [], amStats: [],
+    } as any;
+    const fb = narrativeTemplate(dummy);
+    check('narrativeTemplate returns string', typeof fb === 'string' && fb.length > 0);
+    check('isConfigured returns boolean', typeof isConfigured() === 'boolean');
+  }
+
+  console.log('\n[55] LLM: renderDailySummary integrates narrative (sync via WithNarrative)');
+  {
+    const { renderDailySummaryWithNarrative } = await import('../src/summary/format.js');
+    const dummy = {
+      tanggal: '2026-05-11',
+      totalAmRoster: 3,
+      activeTeamCount: 3,
+      totalVisits: 5,
+      totalPlans: 4,
+      coveragePct: 125,
+      hotDeals: [], needAttention: [], topPerformers: [], amStats: [],
+    } as any;
+    const out = renderDailySummaryWithNarrative(dummy, 'NARRATIVE_SENTINEL_XYZ');
+    check('uses provided narrative', out.includes('NARRATIVE_SENTINEL_XYZ'));
+    check('still contains KPI structure', out.includes('Total Kunjungan: 5'));
+  }
+
+  // 56. (Optional) Real LLM call — only runs if OPENROUTER_API_KEY set
+  console.log('\n[56] LLM: real ping (skipped if no API key)');
+  {
+    const { isConfigured, ask } = await import('../src/llm/openrouter.js');
+    if (!isConfigured()) {
+      check('skipped (no API key) — OK', true);
+    } else {
+      const r = await ask({
+        system: 'Reply dengan 1 kata saja: "PONG"',
+        user: 'ping',
+        maxTokens: 10,
+      });
+      check('LLM call ok=true', r.ok === true);
+      check('response is non-empty', r.text.length > 0);
+      check('latency < 30s', r.latencyMs < 30_000);
+    }
+  }
+
   // 51. Setup status checks return per-integration health
   console.log('\n[51] Setup status: integration health checks');
   {
     const { checkAll } = await import('../src/setup/status.js');
     const rows = await checkAll();
-    check('6 health checks returned', rows.length === 6);
+    check('7 health checks returned', rows.length === 7);
     check('PostgreSQL check exists', rows.some((r) => r.label === 'PostgreSQL'));
     check('PostgreSQL is OK', rows.find((r) => r.label === 'PostgreSQL')?.ok === true);
     check('all checks have detail string', rows.every((r) => typeof r.detail === 'string' && r.detail.length > 0));

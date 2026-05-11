@@ -8,6 +8,7 @@ import { sendReply } from '../wa.js';
 import { fireAlert } from '../alerts/index.js';
 import { sendWeeklyDigestEmail } from '../email/digest.js';
 import { lastCompleteWeekRange } from '../email/digest.js';
+import { ask, isConfigured as llmConfigured } from '../llm/openrouter.js';
 
 export interface TestResult {
   ok: boolean;
@@ -69,6 +70,25 @@ export async function testEmailDigest(): Promise<TestResult> {
       ? `Sent to ${r.recipients.length} recipient(s) via ${mode}${r.messageId ? ` • messageId=${r.messageId}` : ''}`
       : `Failed: ${r.error}`,
     meta: { mode, recipients: r.recipients, range: r.range, messageId: r.messageId },
+  };
+}
+
+/** Test LLM: kirim prompt sederhana, ukur latency + biaya. */
+export async function testLlm(): Promise<TestResult> {
+  if (!llmConfigured()) {
+    return { ok: false, detail: 'OPENROUTER_API_KEY kosong di .env' };
+  }
+  const r = await ask({
+    system: 'Reply ringkas dalam Bahasa Indonesia.',
+    user: 'Halo, dari WRG CRM. Sebut nama model kamu dalam 1 kalimat.',
+    maxTokens: 80,
+  });
+  return {
+    ok: r.ok,
+    detail: r.ok
+      ? `${r.model} • ${r.latencyMs}ms • ${r.usage?.total_tokens ?? '?'} tokens • "${r.text.slice(0, 100)}"`
+      : `Failed: ${r.error}`,
+    meta: { model: r.model, latencyMs: r.latencyMs, usage: r.usage, response: r.text },
   };
 }
 

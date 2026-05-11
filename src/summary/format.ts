@@ -1,6 +1,9 @@
 import { formatDateId } from '../util/dateid.js';
 import { truncate } from '../util/parse.js';
+import { ask, isConfigured as llmConfigured } from '../llm/openrouter.js';
 import type { SummaryData } from './queries.js';
+
+export { narrativeTemplate };
 
 const DIVIDER = '────────────────────';
 
@@ -9,7 +12,8 @@ function bullet(items: string[], emptyText: string): string {
   return items.map((i) => `• ${i}`).join('\n');
 }
 
-function narrative(d: SummaryData): string {
+/** Template-based fallback (dipakai kalau LLM mati / tidak di-config). */
+function narrativeTemplate(d: SummaryData): string {
   const { activeTeamCount, totalAmRoster, coveragePct, totalVisits, totalPlans } = d;
 
   if (totalAmRoster === 0) return 'Roster AM kosong — cek master_user.';
@@ -40,7 +44,73 @@ function narrative(d: SummaryData): string {
   return parts.join('. ') + '.';
 }
 
-export function renderDailySummary(d: SummaryData): string {
+/**
+ * AI-powered narrative via OpenRouter. LLM dikasih data summary mentah,
+ * diminta tulis 2-3 kalimat eksekutif Bahasa Indonesia untuk HOD.
+ * Kalau LLM gagal/tidak configured, fallback ke template.
+ *
+ * Sengaja async — tapi kalau caller mau sync, pakai narrativeTemplate.
+ */
+async function narrativeAi(d: SummaryData): Promise<string> {
+  if (!llmConfigured()) return narrativeTemplate(d);
+
+  const hotDealsList = d.hotDeals
+    .slice(0, 5)
+    .map((h) => `- ${h.customer_name} (${h.nama_am}) stage ${h.stage} ${h.status}${h.note ? ': ' + h.note.slice(0, 80) : ''}`)
+    .join('\n') || '(tidak ada)';
+  const attentionList = d.needAttention
+    .slice(0, 5)
+    .map((a) => `- ${a.nama_am} (${a.area ?? '-'}): ${a.plans} plan, ${a.visits} visit`)
+    .join('\n') || '(semua AM aktif)';
+  const topPerformerList = d.topPerformers
+    .map((t) => `- ${t.nama_am}: ${t.visits} visit`)
+    .join('\n') || '(belum ada)';
+
+  const userPrompt = `Tanggal: ${d.tanggal}
+Tim Aktif: ${d.activeTeamCount}/${d.totalAmRoster}
+Total Visit: ${d.totalVisits}
+Total Plan: ${d.totalPlans}
+Coverage: ${d.coveragePct}%
+
+Hot Deals (yang updated hari ini):
+${hotDealsList}
+
+Perlu perhatian:
+${attentionList}
+
+Top performer:
+${topPerformerList}`;
+
+  const result = await ask({
+    system:
+      'Kamu adalah analis sales untuk WRG CRM. Tulis ringkasan 2-3 kalimat dalam Bahasa Indonesia ' +
+      'untuk Head of Department dari raw data harian. Tone profesional tapi tidak kaku. ' +
+      'Highlight engagement, coverage plan, deal panas, dan AM yang butuh perhatian. ' +
+      'Berikan tone "actionable insight" — bukan sekadar copy angka. Maksimal 60 kata. ' +
+      'JANGAN pakai bullet point, JANGAN pakai header, JANGAN ulang angka mentah, output 2-3 kalimat polos.',
+    user: userPrompt,
+    temperature: 0.4,
+    maxTokens: 200,
+  });
+
+  if (!result.ok || !result.text) return narrativeTemplate(d);
+  return result.text;
+}
+
+export async function generateNarrative(d: SummaryData): Promise<string> {
+  return narrativeAi(d);
+}
+
+export async function renderDailySummary(d: SummaryData): Promise<string> {
+  const narrativeText = await generateNarrative(d);
+  return renderDailySummaryWithNarrative(d, narrativeText);
+}
+
+/**
+ * Sync render — caller kasih narrative sendiri (atau pakai default
+ * `narrativeTemplate`). Dipakai untuk tests yang gak mau LLM call.
+ */
+export function renderDailySummaryWithNarrative(d: SummaryData, narrativeText: string): string {
   const dateLabel = formatDateId(d.tanggal);
 
   const hotLines = d.hotDeals.map((h) => {
@@ -74,7 +144,7 @@ export function renderDailySummary(d: SummaryData): string {
     bullet(topLines, ''),
     '',
     `📝 Summary:`,
-    narrative(d),
+    narrativeText,
     DIVIDER,
     `WRG CRM v4 | OpenClaw + RTK`,
   ].join('\n');

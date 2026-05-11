@@ -126,6 +126,11 @@ export const SETUP_HTML = `<!DOCTYPE html>
       <div class="detail">Validate Google client setup (tanpa actual login)</div>
       <button class="btn" data-test="oauth">Verify</button>
     </div>
+    <div class="row">
+      <div class="label">AI / LLM</div>
+      <div class="detail">Ping OpenRouter, ukur latency + token usage</div>
+      <button class="btn" data-test="llm">Test LLM</button>
+    </div>
     <div id="test-result" style="margin-top: 12px; display: none">
       <pre class="snippet" id="test-output"></pre>
     </div>

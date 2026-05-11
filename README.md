@@ -254,8 +254,10 @@ src/
     status.ts          integration health checks
     env.ts             .env reader with secret masking
     users.ts           master_user CRUD + validation
-    tests.ts           fire test for WA/alert/email/oauth
+    tests.ts           fire test for WA/alert/email/oauth/llm
     page.ts            setup HTML page (5 sections)
+  llm/
+    openrouter.ts      OpenRouter chat-completion client (timeout + fallback)
   handlers/
     plan.ts
     report.ts
@@ -463,6 +465,50 @@ ALERT_WEBHOOK_TIMEOUT_MS=5000
 ALERT_DEBOUNCE_MIN=30          # jangan re-fire alert yang sama dalam 30 menit
 ALERT_ESCALATE_AFTER_MIN=15    # warn yang unresolved >15 menit → critical follow-up
 ```
+
+## AI features (OpenRouter)
+
+Sistem opsional pakai LLM via OpenRouter untuk fitur yang lebih kontekstual.
+Saat ini di-wire ke:
+
+- **Daily summary narrative** — paragraph 2-3 kalimat di summary harian
+  yang dikirim ke group HOD. Tanpa LLM → fallback ke template angka.
+  Dengan LLM → executive insight yang sebut AM dan customer specific.
+
+**Setup:**
+```bash
+# 1. Daftar di openrouter.ai → API Keys → Create
+# 2. Edit .env:
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_MODEL=openai/gpt-4o-mini    # cheap default; lihat openrouter.ai/models
+# 3. Restart server
+```
+
+**Cost estimate**: gpt-4o-mini ~$0.15/1M input tokens. Daily summary
+~300 tokens/call × 30 cron fire/bulan = **~$0.001/bulan** (literally pennies).
+
+**Test:** Setup page → section 2 → "Test LLM" button. Atau:
+```bash
+curl -X POST 'http://localhost:3000/api/setup/test/llm?token=TOKEN'
+# → { ok:true, detail:"openai/gpt-4o-mini • 912ms • 55 tokens • ...", meta:{...} }
+```
+
+**Comparison narrative output:**
+
+Template (no LLM):
+> Engagement tim rendah (hanya 20% aktif). 1 deal panas patut difollow-up
+> cepat. 4 AM perlu didorong besok.
+
+LLM:
+> Hari ini, tim menunjukkan keterlibatan yang rendah dengan hanya satu
+> kunjungan dan tidak ada rencana yang dibuat. Fokus pada pengembangan
+> strategi untuk meningkatkan aktivitas, terutama bagi anggota yang
+> membutuhkan perhatian lebih seperti Budi, Citra, Dewi, dan Rini.
+> Sementara itu, dukung Andi Pratama dalam menutup deal panas di RS
+> Husada Utama untuk memaksimalkan potensi penjualan.
+
+LLM versi lebih actionable, sebut nama specific, terbaca seperti briefing
+exec — bukan template angka.
 
 ## Authentication
 

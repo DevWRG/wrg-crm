@@ -51,7 +51,7 @@ import { SETUP_HTML } from './setup/page.js';
 import { checkAll } from './setup/status.js';
 import { readEnvSections } from './setup/env.js';
 import { listAms, createAm, toggleAmAktif, type CreateAmInput } from './setup/users.js';
-import { testWaSend, testAlertChannels, testEmailDigest, testOAuthConfig } from './setup/tests.js';
+import { testWaSend, testAlertChannels, testEmailDigest, testOAuthConfig, testLlm } from './setup/tests.js';
 import type { InboundMessage } from './types.js';
 
 // In-memory CSRF state store for OAuth flow (single-instance OK).
@@ -234,6 +234,11 @@ app.post('/api/setup/test/email', async (req, reply) => {
 app.post('/api/setup/test/oauth', async (req, reply) => {
   if (!(await requireDashboardToken(req, reply))) return;
   return reply.send(testOAuthConfig());
+});
+
+app.post('/api/setup/test/llm', async (req, reply) => {
+  if (!(await requireDashboardToken(req, reply))) return;
+  return reply.send(await testLlm());
 });
 
 app.get('/api/overview', async (req, reply) => {

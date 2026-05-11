@@ -36,6 +36,15 @@ export const config = {
   dashboard: {
     token: process.env.DASHBOARD_TOKEN || '',
   },
+  llm: {
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+    baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+    timeoutMs: parseInt(process.env.OPENROUTER_TIMEOUT_MS || '10000', 10),
+    /** Optional referer + title untuk OpenRouter analytics. */
+    referer: process.env.OPENROUTER_REFERER || 'https://github.com/DevWRG/wrg-crm',
+    appTitle: process.env.OPENROUTER_APP_TITLE || 'WRG CRM',
+  },
   auth: {
     googleClientId: process.env.OAUTH_GOOGLE_CLIENT_ID || '',
     googleClientSecret: process.env.OAUTH_GOOGLE_CLIENT_SECRET || '',
