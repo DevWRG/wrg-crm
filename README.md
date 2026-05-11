@@ -1,5 +1,7 @@
 # WRG CRM Assistant — OpenClaw
 
+[![CI](https://github.com/DevWRG/wrg-crm/actions/workflows/ci.yml/badge.svg)](https://github.com/DevWRG/wrg-crm/actions/workflows/ci.yml)
+
 WhatsApp-driven CRM untuk tim sales WRG × ACE. Memproses pesan hashtag
 (`#PLAN`, `#REPORT`, `#LEADS`, `#UPDATE`) dari WA group "WRG Sales Command
 Center", menyimpan ke PostgreSQL lokal, dan mengirim balasan kembali ke
