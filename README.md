@@ -7,6 +7,8 @@ dashboard real-time + PDF report mingguan ke direksi.
 > Replaces v4 (Node.js/TypeScript stack). v4 history preserved di branch
 > `archive/v4` & tag `v4-archive`.
 
+**Onboarding tim baru / deploy ke Mac Mini baru?** → baca [`SETUP.md`](SETUP.md).
+
 ---
 
 ## Arsitektur

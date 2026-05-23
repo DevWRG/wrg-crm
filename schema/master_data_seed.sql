@@ -263,7 +263,31 @@ INSERT INTO master_territory (am_panggilan, hod_panggilan, cabang, kota) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
--- 5. VERIFICATION QUERIES
+-- 5. SEED master_holiday — libur nasional 2026 (Indonesia)
+--    Dipakai is_working_day() untuk skip libur di plan/report check.
+--    Update tiap awal tahun untuk kalender baru.
+-- ============================================================
+INSERT INTO master_holiday (tanggal, keterangan) VALUES
+  ('2026-01-01', 'Tahun Baru 2026'),
+  ('2026-01-27', 'Isra Miraj'),
+  ('2026-01-29', 'Tahun Baru Imlek'),
+  ('2026-03-28', 'Hari Raya Nyepi'),
+  ('2026-04-03', 'Wafat Isa Almasih'),
+  ('2026-04-20', 'Idul Fitri 1447H Hari 1'),
+  ('2026-04-21', 'Idul Fitri 1447H Hari 2'),
+  ('2026-05-01', 'Hari Buruh Internasional'),
+  ('2026-05-14', 'Kenaikan Isa Almasih'),
+  ('2026-05-23', 'Hari Raya Waisak'),
+  ('2026-06-01', 'Hari Lahir Pancasila'),
+  ('2026-06-06', 'Idul Adha 1447H'),
+  ('2026-06-26', 'Tahun Baru Islam 1448H'),
+  ('2026-08-17', 'HUT Kemerdekaan RI'),
+  ('2026-09-04', 'Maulid Nabi Muhammad SAW'),
+  ('2026-12-25', 'Hari Raya Natal')
+ON CONFLICT (tanggal) DO NOTHING;
+
+-- ============================================================
+-- 6. VERIFICATION QUERIES
 -- ============================================================
 
 -- Summary per role
