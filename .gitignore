@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Runtime state — environment flag, inbound cursor, lock files
+data/state/
+
+# Daily AI summaries — regenerable via wrg-daily.sh daily_summary cron
+data/daily-summary/
+
+# Claude Code local settings — per-user permission allowlist
+.claude/settings.local.json
+
+# Operational logs (cron, daily, dashboard) — churn constantly + may contain PII
+logs/
+*.log
+
+# PG dumps — out-of-band restore baseline, kept on local disk, not in VCS
+backups/
+
+# Generated PDFs — regenerable from data via scripts/export_pdf.sh
+exports/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
