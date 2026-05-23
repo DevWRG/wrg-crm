@@ -11,6 +11,36 @@ dashboard real-time + PDF report mingguan ke direksi.
 
 ---
 
+## Screenshots
+
+### Per Orang — view utama
+
+![Dashboard per-orang dengan tren chart harian](docs/images/dashboard-main.png)
+
+KPI strip (7 metric), tren chart harian (Plan/Report/Late + weekend & holiday shading), tabel per-karyawan dengan role tag, plan/report count, % selesai bar, late, dan unmatched. Klik baris → drilldown.
+
+### Tren Plan & Report harian
+
+![Tren chart dengan 3 line series](docs/images/dashboard-trend.png)
+
+Line chart 3 series: Plan total (kunjungan + todo items, hijau), Report aktivitas (biru), Late submission (merah dashed). Vertical band abu-abu = weekend/libur nasional. Yellow dot di atas = holiday marker. Hari ini ditandai bold + hijau. Hover titik → tooltip detail.
+
+### Per HOD Sales (East / West)
+
+![Per HOD Sales tab — Rocky East vs Yogi West](docs/images/dashboard-hod.png)
+
+Agregasi khusus AM: grouping by HOD area via `master_territory` table. Berguna untuk compare performance Rocky (East: Bali/Madura/SBY 2/Kediri/Malang/NTB) vs Yogi (West: Cirebon/Lamongan/Madiun/Palembang/Solo & Yogya/Jember).
+
+### Drilldown per orang
+
+![Modal drilldown untuk satu AM](docs/images/dashboard-drilldown.png)
+
+Klik baris di tabel Per Orang → modal lengkap. Info user + Plan kunjungan (`sales_plan`) dengan status `reported` / `pending` / `late submit`, hasil + next action per customer, Todo list (`sales_todo`), dan Unmatched activity.
+
+> Screenshots di-generate dari `wrg_crm_dev` dengan demo data (`python3 scripts/seed_demo_data.py`). Nama karyawan asli, tapi plan/report numbers fake.
+
+---
+
 ## Arsitektur
 
 ```
