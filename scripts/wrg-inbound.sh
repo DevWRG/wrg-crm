@@ -26,19 +26,40 @@ mkdir -p "$STATE_DIR"
 CURSOR_FILE="$STATE_DIR/inbound-cursor"
 
 # Lock dir — prevent overlap with concurrent run (macOS-friendly atomic mkdir).
-# Stale lock recovery: if lockdir > 10 menit (cursor mutation gak boleh selama itu), force remove.
+# PID-based stale recovery: store our PID inside the lockdir; on contention,
+# check if the owning PID is still alive via `kill -0`. If dead → reclaim
+# immediately (no 10-minute wait). Trap is registered BEFORE any lock activity
+# and guarded by LOCK_OWNED so we never accidentally clean another instance's lock.
 LOCK_DIR="$STATE_DIR/inbound.lock.d"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  # Check stale (> 600s old) — recover
-  LOCK_AGE=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
-  if [ "$LOCK_AGE" -gt 600 ]; then
-    rm -rf "$LOCK_DIR" 2>/dev/null
-    mkdir "$LOCK_DIR" 2>/dev/null || exit 0
-  else
-    exit 0   # another instance running, exit silently
+LOCK_OWNED=0
+trap '[ "$LOCK_OWNED" = "1" ] && rm -rf "$LOCK_DIR" 2>/dev/null' EXIT
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo $$ > "$LOCK_DIR/pid"
+    LOCK_OWNED=1
+    return 0
   fi
+  # Lock exists — verify owner.
+  local OWNER_PID
+  OWNER_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null)
+  if [ -n "$OWNER_PID" ] && kill -0 "$OWNER_PID" 2>/dev/null; then
+    return 1   # owner alive, another instance running — exit silently
+  fi
+  # Owner dead (or no PID file) — reclaim.
+  rm -rf "$LOCK_DIR" 2>/dev/null
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo $$ > "$LOCK_DIR/pid"
+    LOCK_OWNED=1
+    log "  inbound: reclaimed stale lock (prev PID=${OWNER_PID:-unknown})"
+    return 0
+  fi
+  return 1
+}
+
+if ! acquire_lock; then
+  exit 0
 fi
-trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
 
 # ── Hashtag dispatch ────────────────────────────────────────
 
