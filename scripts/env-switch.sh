@@ -17,6 +17,18 @@ source "$(dirname "$0")/../config/config.sh"
 ENV_FILE="$BASE_DIR/data/state/environment"
 mkdir -p "$(dirname "$ENV_FILE")"
 
+# Secondary mirror — written for the launchd dashboard which can't read Documents/
+# due to macOS Sequoia TCC restrictions. Path matches dashboard.py ENV_FILE_MIRROR.
+ENV_MIRROR="/Users/development/wrg-crm-runtime/environment"
+
+# Helper: write to both canonical & mirror so dashboard picks up flip immediately.
+write_env() {
+  echo "$1" > "$ENV_FILE"
+  if [ -d "$(dirname "$ENV_MIRROR")" ]; then
+    echo "$1" > "$ENV_MIRROR"
+  fi
+}
+
 case "${1:-status}" in
   status)
     CURRENT=$(cat "$ENV_FILE" 2>/dev/null || echo "dev")
@@ -43,7 +55,7 @@ case "${1:-status}" in
     ;;
 
   dev)
-    echo "dev" > "$ENV_FILE"
+    write_env "dev"
     echo "✓ Switched to DEV."
     echo "  → DB:     wrg_crm_dev"
     echo "  → Filter: Research group only"
@@ -71,7 +83,7 @@ case "${1:-status}" in
         exit 1
       fi
     fi
-    echo "prod" > "$ENV_FILE"
+    write_env "prod"
     echo "✓ Switched to PROD."
     echo "  → DB:     wrg_crm_prod"
     echo "  → Filter: ALL groups"

@@ -30,6 +30,12 @@ else:
     PROJECT_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_DIR / "data" / "state" / "environment"
 
+# Secondary mirror of env state — written by env-switch.sh to a location the
+# launchd-spawned dashboard process can actually read. macOS Sequoia TCC blocks
+# launchd-spawned Python.app from reading Documents/, so the dashboard reads
+# from this mirror first; falls back to the canonical ENV_FILE if mirror absent.
+ENV_FILE_MIRROR = Path(__file__).resolve().parent / "environment"
+
 PG_USER = "wrg_admin"
 PSQL_BIN = shutil.which("psql") or "/opt/homebrew/opt/postgresql@16/bin/psql"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -38,11 +44,15 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # ── DB helpers ──────────────────────────────────────────────────────────
 
 def current_env() -> str:
-    try:
-        v = ENV_FILE.read_text().strip().lower()
-    except OSError:
-        v = ""
-    return "prod" if v == "prod" else "dev"
+    # Try mirror first (TCC-friendly path), then canonical.
+    for p in (ENV_FILE_MIRROR, ENV_FILE):
+        try:
+            v = p.read_text().strip().lower()
+            if v in ("dev", "prod"):
+                return v
+        except OSError:
+            continue
+    return "dev"
 
 
 def db_name(env: str | None = None) -> str:
