@@ -7,10 +7,14 @@ dashboard real-time + PDF report mingguan ke direksi.
 > Replaces v4 (Node.js/TypeScript stack). v4 history preserved di branch
 > `archive/v4` & tag `v4-archive`.
 
-**Status: 🟢 Prod live sejak 2026-05-24.** Bot WA aktif di semua grup yang
-di-invite; `#PLAN`/`#REPORT`/`#LEADS`/`#UPDATE` dari 54 user wajib (AM +
-Operasional/Admin/Teknisi/dll) tersimpan ke `wrg_crm_prod`. Toggle env via
-`bash scripts/env-switch.sh dev` kalau perlu revert.
+**Status: 🟢 Prod live sejak 2026-05-24 — batch 1 rollout.**
+Bot WA aktif di semua grup yang di-invite. Cron reminder
+(`plan_check` / `report_check` / `daily_summary`) target **37 orang** non-AM/
+non-Teknisi/non-HOD (Operasional, Admin, Finance, Accounting, Purchasing,
+Logistik, Supply Chain, GA). AM (12) & Teknisi (5) **ditunda ke batch 2** —
+masih bisa submit kalau mau, tapi gak dapat reminder. Toggle env via
+`bash scripts/env-switch.sh dev` kalau perlu revert. Detail batch state:
+[`schema/migration_2026-05-24_batch1_rollout.sql`](schema/migration_2026-05-24_batch1_rollout.sql).
 
 **Onboarding tim baru / deploy ke Mac Mini baru?** → baca [`SETUP.md`](SETUP.md).
 

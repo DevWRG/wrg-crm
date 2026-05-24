@@ -109,8 +109,11 @@ ON CONFLICT (wa_number) DO UPDATE SET
   panggilan          = EXCLUDED.panggilan,
   posisi             = EXCLUDED.posisi,
   cabang             = EXCLUDED.cabang,
-  role               = EXCLUDED.role,
-  wajib_plan_report  = EXCLUDED.wajib_plan_report;
+  role               = EXCLUDED.role;
+  -- NOTE: wajib_plan_report sengaja TIDAK di-overwrite di ON CONFLICT,
+  -- supaya operator override (mis. batch rollout via migration file)
+  -- tidak ke-revert saat seed di-rerun. Untuk fresh install, default
+  -- dari VALUES tetap berlaku.
 
 -- ============================================================
 -- 3. (REMOVED — ALTER pindah ke section 1.5 di atas)
