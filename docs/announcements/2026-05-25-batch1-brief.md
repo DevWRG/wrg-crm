@@ -51,13 +51,16 @@ harian. AM & Teknisi menyusul nanti.
 
    (Cukup 1 kata nama panggilan — Andi/Budi/Cici, dst.)
 
-⏰ DEADLINE:
-- #PLAN: sebelum 08:00 (lewat dari itu = tercatat "late")
-- #REPORT: sebelum 20:30
-- Lewat batas: bot tetap terima, tapi di-flag late
+⏰ DEADLINE #PLAN:
+- Non-lapangan (Admin, Finance, Accounting, Purchasing, Supply
+  Chain, Logistik, GA): sebelum *08:30*
+- Lapangan (Operasional Kirim Tagih): sebelum *08:00*
+- Lewat batas: bot tetap terima, tapi di-flag "late"
+
+⏰ DEADLINE #REPORT (semua role): sebelum 20:30
 
 🔔 REMINDER:
-- 08:00 — kalau belum #PLAN, bot kirim DM
+- Pagi (sesuai deadline role) — kalau belum #PLAN, bot kirim DM
 - 20:30 — kalau ada #PLAN tapi belum #REPORT, bot kirim DM
 
 ❓ TANYA:
