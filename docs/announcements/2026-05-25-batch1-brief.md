@@ -37,6 +37,20 @@ harian. AM & Teknisi menyusul nanti.
    2. Task kedua — selesai
    3. Task ketiga — postponed ke besok
 
+👥 KALAU 1 HP DIPAKAI BERSAMA (mis. admin counter):
+   Tulis nama panggilan setelah #PLAN / #REPORT supaya
+   bot bisa pisahin per orang:
+
+   #PLAN Andi
+   1. Task A
+   2. Task B
+
+   #REPORT Andi
+   1. done
+   2. done, ada catatan
+
+   (Cukup 1 kata nama panggilan — Andi/Budi/Cici, dst.)
+
 ⏰ DEADLINE:
 - #PLAN: sebelum 08:00 (lewat dari itu = tercatat "late")
 - #REPORT: sebelum 20:30
@@ -53,6 +67,92 @@ harian. AM & Teknisi menyusul nanti.
 
 Semangat! 💪
 ```
+
+---
+
+## Format khusus: 1 HP dipakai bersama beberapa orang
+
+Kalau di unit lo 1 nomor WA dipakai bergantian (mis. admin counter, gudang
+shared, tim shift), tulis **nama orang yg submit** setelah `#PLAN` /
+`#REPORT`. Bot bakal mencatat nama tsb di histori, walaupun secara teknis
+tetap kekirim atas WA pemilik nomor.
+
+### Format inline (1 baris dgn separator `|`)
+
+```
+#PLAN Andi 26/05/2026 | 1. Input invoice A | 2. Update DB customer | 3. Follow PO
+
+#REPORT Andi 26/05/2026 | 1. done | 2. done, 12 record baru | 3. blocked, vendor blm balas
+```
+
+### Format multiline (lebih readable di WA)
+
+```
+#PLAN Andi 26/05/2026
+1. Input invoice A
+2. Update DB customer
+3. Follow PO
+```
+
+```
+#REPORT Andi 26/05/2026
+1. done
+2. done, 12 record baru
+3. blocked, vendor blm balas
+```
+
+### Rules nama
+
+- **Nama HARUS ditulis kalau HP shared.** Kalau gak ditulis, bot anggap submit dari
+  owner HP (default).
+- Cukup nama panggilan (1 kata) — `Andi`, `Budi`, `Cici`. Gak perlu nama lengkap.
+- Tanggal opsional. Kalau gak ditulis, default = hari ini.
+- Case-insensitive — `#plan andi`, `#Plan Andi`, `#PLAN ANDI` sama aja.
+
+### Yang HARUS dihindari
+
+```
+❌ #PLAN
+   1. ...        ← bot anggap kamu pemilik HP
+
+❌ #PLAN Tim Admin Cabang Madiun lengkap
+   1. ...        ← nama terlalu panjang, parser bingung
+
+❌ #PLAN 26/05/2026  Andi
+   1. ...        ← urutan salah, tanggal jangan duluan
+```
+
+### Contoh real
+
+**Admin Counter Gudang dipakai 3 orang (Adi, Budi, Cici) — masing-masing submit pakai 1 HP yg sama:**
+
+```
+#PLAN Adi
+1. Receiving 3 shipment baru
+2. Update kartu stok
+
+#REPORT Adi
+1. Receiving done, 3 PO closed
+2. Stok update done
+
+──── (Budi lanjut pake HP yg sama) ────
+
+#PLAN Budi
+1. Picking 5 SO outbound
+2. Packing & labeling
+
+#REPORT Budi
+1. Done semua 5
+2. Done, ready ship
+
+──── (Cici lanjut) ────
+
+#PLAN Cici
+1. Cek expired reagen
+2. Update FIFO board
+```
+
+Dashboard direksi bakal show 3 entry terpisah dgn label nama "Adi", "Budi", "Cici" — meskipun WA owner-nya 1.
 
 ---
 
@@ -182,6 +282,10 @@ Bisa. Tapi konsekuensinya plan ke-skip → tercatat "unmatched activity" di dash
 
 **Q: Cuti / sakit gimana?**
 Kasih tau atasan langsung lewat WA biasa. Bot bakal tetap kirim reminder (sistem belum tau cuti). Atasan tinggal mark exception manual.
+
+**Q: HP unit kami dipakai bareng — submission orang lain dianggap saya?**
+Cantumkan nama panggilan setelah hashtag, contoh `#PLAN Andi`. Liat section
+"Format khusus: 1 HP dipakai bersama" di atas.
 
 **Q: Bot kirim notif aneh / error?**
 Screenshot + forward ke Pak Husni. Sertakan jam kirim & isi pesan.
