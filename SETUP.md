@@ -279,7 +279,7 @@ PATH=/opt/homebrew/bin:/opt/homebrew/opt/postgresql@16/bin:/usr/local/bin:/usr/b
 */1  *  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/wrg-inbound.sh >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 
 # Daily reminders (dev & prod aware via env-switch)
-0    8  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/wrg-daily.sh plan_check     >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
+30   8  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/wrg-daily.sh plan_check     >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 30  20  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/wrg-daily.sh report_check   >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 0   22  *  *  1-5 bash /Users/development/Documents/wrg-crm/scripts/wrg-daily.sh daily_summary >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 

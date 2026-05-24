@@ -103,7 +103,7 @@ wrg-crm/
 │   └── wrg-daily/                 plan_check, report_check, daily_summary cron job logic
 └── scripts/
     ├── wrg-inbound.sh             Cron 1m: poll openclaw, dispatch ke skill
-    ├── wrg-daily.sh               Cron daily: reminder plan (08:00), report (20:30), summary (22:00)
+    ├── wrg-daily.sh               Cron daily: reminder plan (08:30), report (20:30), summary (22:00)
     ├── dashboard.py               HTTP server :8091 — plan/report dashboard
     ├── reload-dashboard.sh        Sync ke ~/wrg-crm-runtime/ + restart launchd
     ├── seed_demo_data.py          Generate realistic demo data di dev DB
@@ -200,7 +200,7 @@ Output: `exports/wrg-report-{from}_{to}-{timestamp}.pdf` (~660KB, 7 halaman).
 
 ```
 */1 * * * *   wrg-inbound.sh          → poll WA & dispatch ke skill
-0   8 * * *   wrg-daily.sh plan_check  → reminder AM yg belum kirim plan
+30  8 * * *   wrg-daily.sh plan_check  → reminder yg belum kirim plan (batch 1)
 30 20 * * *   wrg-daily.sh report_check → reminder AM yg belum kirim report
 0  22 * * 1-5 wrg-daily.sh daily_summary → AI summary ke admin
 0   2 * * *   backup_pg.sh             → pg_dump nightly
