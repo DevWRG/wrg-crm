@@ -7,6 +7,11 @@ dashboard real-time + PDF report mingguan ke direksi.
 > Replaces v4 (Node.js/TypeScript stack). v4 history preserved di branch
 > `archive/v4` & tag `v4-archive`.
 
+**Status: 🟢 Prod live sejak 2026-05-24.** Bot WA aktif di semua grup yang
+di-invite; `#PLAN`/`#REPORT`/`#LEADS`/`#UPDATE` dari 54 user wajib (AM +
+Operasional/Admin/Teknisi/dll) tersimpan ke `wrg_crm_prod`. Toggle env via
+`bash scripts/env-switch.sh dev` kalau perlu revert.
+
 **Onboarding tim baru / deploy ke Mac Mini baru?** → baca [`SETUP.md`](SETUP.md).
 
 ---
