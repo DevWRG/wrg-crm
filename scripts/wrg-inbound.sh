@@ -64,12 +64,13 @@ fi
 # ── Hashtag dispatch ────────────────────────────────────────
 
 # Late threshold per role (HHMM format).
-# Decision per HOD Squad 2026-05-24: non-lapangan (office-based) dapat
-# extra 30 menit krn perlu cek email/info pagi sebelum susun plan.
-# Lapangan (field) jalan jam 08:00 sesuai jam kerja standar.
+# Decision per HOD Squad 2026-05-24:
+# - Batch 1 (all 37 wajib users): 08:30 — Bu Ika usul, Husni ack & extend ke
+#   Operasional Kirim Tagih supaya semua batch 1 unified.
+# - Batch 2 (AM, Teknisi) default 08:00 sampai keputusan HOD-area mereka.
 late_threshold_for_role() {
   case "$1" in
-    Admin|Finance|Accounting|Purchasing|"Supply Chain"|Logistik|GA)
+    Admin|Finance|Accounting|Purchasing|"Supply Chain"|Logistik|GA|Operasional)
       echo "0830" ;;
     *)
       echo "0800" ;;
