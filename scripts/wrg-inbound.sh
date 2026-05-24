@@ -63,10 +63,27 @@ fi
 
 # ── Hashtag dispatch ────────────────────────────────────────
 
-# Late plan flag: TRUE kalau submit hari ini AND jam > 08:00
+# Late threshold per role (HHMM format).
+# Decision per HOD Squad 2026-05-24: non-lapangan (office-based) dapat
+# extra 30 menit krn perlu cek email/info pagi sebelum susun plan.
+# Lapangan (field) jalan jam 08:00 sesuai jam kerja standar.
+late_threshold_for_role() {
+  case "$1" in
+    Admin|Finance|Accounting|Purchasing|"Supply Chain"|Logistik|GA)
+      echo "0830" ;;
+    *)
+      echo "0800" ;;
+  esac
+}
+
+# Late plan flag: TRUE kalau submit hari ini AND jam > role-specific threshold.
+# Args: $1=tanggal ISO, $2=role (optional, default '' → 08:00).
 compute_is_late() {
   local TGL_ISO="$1"
-  if [ "$TGL_ISO" = "$(date '+%Y-%m-%d')" ] && [ "$(date '+%H%M')" -gt "0800" ]; then
+  local ROLE="${2:-}"
+  local THRESHOLD
+  THRESHOLD=$(late_threshold_for_role "$ROLE")
+  if [ "$TGL_ISO" = "$(date '+%Y-%m-%d')" ] && [ "$(date '+%H%M')" -gt "$THRESHOLD" ]; then
     echo "TRUE"
   else
     echo "FALSE"
@@ -245,7 +262,8 @@ cust: ..."
     log "  #PLAN AM rejected: too far ahead $TGL_ISO from user=$USER_ID"
     return 1
   fi
-  IS_LATE=$(compute_is_late "$TGL_ISO")
+  # AM role is hard-coded here (this is the AM-mode handler) → lapangan = 08:00.
+  IS_LATE=$(compute_is_late "$TGL_ISO" "AM")
 
   local CUSTS=() TUJUANS=() GOALS=()
   if echo "$BODY" | grep -qE '^[^#]*\|[^|]+\|'; then
@@ -380,7 +398,10 @@ Contoh:
     log "  #PLAN TODO rejected: too far ahead $TGL_ISO from user=$USER_ID"
     return 1
   fi
-  IS_LATE=$(compute_is_late "$TGL_ISO")
+  # TODO mode = non-AM. Lookup role for threshold (non-lapangan → 08:30).
+  local USER_ROLE
+  USER_ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
+  IS_LATE=$(compute_is_late "$TGL_ISO" "$USER_ROLE")
 
   # Extract numbered items: "1. X", "2. Y", etc.
   # Trim each, drop empty.
