@@ -368,6 +368,7 @@ SQL
   # Compact reply (consistent dengan handle_plan_todo): English date + count summary,
   # no per-customer enumeration. Customer detail tetap tersimpan di sales_plan untuk
   # report_check + dashboard.
+  # AM hardcoded threshold 08:00 (lapangan).
   local REPLY="✅ Plan tercatat, ${DISPLAY_NAME}"
   [ "$IS_LATE" = "TRUE" ] && REPLY="${REPLY}
 ⏰ Plan masuk $(date '+%H:%M') — melewati batas jam 08:00"
@@ -468,10 +469,15 @@ SQL
     [ -z "$DISPLAY_NAME" ] && DISPLAY_NAME="$SENDER_NAME"
   fi
 
-  # Build compact reply (no per-item enumeration — too long for WhatsApp)
+  # Build compact reply. Deadline string driven by role threshold (08:30 batch 1
+  # non-lapangan/Operasional, 08:00 lapangan AM/Teknisi).
+  local THRESHOLD_HHMM DEADLINE_DISPLAY
+  THRESHOLD_HHMM=$(late_threshold_for_role "$USER_ROLE")
+  DEADLINE_DISPLAY="${THRESHOLD_HHMM:0:2}:${THRESHOLD_HHMM:2:2}"
+
   local REPLY="✅ Plan tercatat, ${DISPLAY_NAME}"
   [ "$IS_LATE" = "TRUE" ] && REPLY="${REPLY}
-⏰ Plan masuk $(date '+%H:%M') — melewati batas jam 08:00"
+⏰ Plan masuk $(date '+%H:%M') — melewati batas jam ${DEADLINE_DISPLAY}"
   REPLY="${REPLY}
 
 📅 $(format_tanggal_display_en "$TGL_ISO")
