@@ -1009,7 +1009,8 @@ for D in "${DATES[@]}"; do
         " 2>/dev/null | head -1)
       fi
       if [ -z "$USER_ROW" ] && [ -n "$SENDER_NAME" ]; then
-        # Fallback: exact match nama (case-insensitive) atau panggilan
+        # Fallback: match nama/panggilan dgn 4 tier priority. WA pushname seringkali
+        # parsial (mis. "Denys Chandra" sementara DB "Denys Chandra Irawan").
         SAFE_NAME=$(echo "$SENDER_NAME" | sed "s/'/''/g")
         USER_ROW=$($PSQL -c "
           SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
@@ -1017,6 +1018,17 @@ for D in "${DATES[@]}"; do
           FROM master_user
           WHERE LOWER(nama) = LOWER('$SAFE_NAME')
              OR LOWER(panggilan) = LOWER('$SAFE_NAME')
+             OR LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'
+             OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))
+          ORDER BY
+            CASE
+              WHEN LOWER(nama)      = LOWER('$SAFE_NAME')                          THEN 1
+              WHEN LOWER(panggilan) = LOWER('$SAFE_NAME')                          THEN 2
+              WHEN LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'                    THEN 3
+              WHEN LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))      THEN 4
+              ELSE 5
+            END,
+            LENGTH(nama)
           LIMIT 1;
         " 2>/dev/null | head -1)
         if [ -n "$USER_ROW" ]; then
