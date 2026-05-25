@@ -48,7 +48,10 @@ if [ "$JOB" = "plan_check" ]; then
   SKIPPED=0
   SKIPPED_NO_GROUP=0
 
-  # Anggota wajib plan/report yang belum submit hari ini
+  # Anggota wajib plan/report yang belum submit hari ini.
+  # Cek BOTH sales_plan (AM mode) DAN sales_todo (non-AM mode).
+  # Batch 1 mayoritas pakai sales_todo, jadi tanpa OR ini reminder kirim
+  # ke semua orang termasuk yg udah submit todo.
   ROWS=$($PSQL <<SQL
 SELECT
   mu.wa_number || '|' ||
@@ -62,6 +65,11 @@ WHERE mu.aktif = TRUE
     SELECT 1 FROM sales_plan sp
     WHERE sp.user_id = mu.id
       AND sp.tanggal = CURRENT_DATE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM sales_todo st
+    WHERE st.user_id = mu.id
+      AND st.tanggal = CURRENT_DATE
   )
 ORDER BY mu.nama;
 SQL
