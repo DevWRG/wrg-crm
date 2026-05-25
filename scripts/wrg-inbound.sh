@@ -446,11 +446,12 @@ Pakai numbered list:
   if ! psql -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 -q <<SQL >/dev/null 2>>"$LOG_DIR/daily.log"
 INSERT INTO sales_todo (user_id, tanggal, items, raw_body, message_id, submitted_at, is_late_plan)
 VALUES ($USER_ID, '$TGL_ISO', \$ITEMS\$$ITEMS_JSON\$ITEMS\$::jsonb, \$BODY\$$SAFE_BODY\$BODY\$, \$MID\$$MSG_ID\$MID\$, NOW(), $IS_LATE)
-ON CONFLICT (message_id) DO UPDATE SET
+ON CONFLICT (user_id, tanggal) DO UPDATE SET
   items        = EXCLUDED.items,
   raw_body     = EXCLUDED.raw_body,
-  submitted_at = EXCLUDED.submitted_at,
-  is_late_plan = EXCLUDED.is_late_plan;
+  message_id   = EXCLUDED.message_id,
+  submitted_at = LEAST(sales_todo.submitted_at, EXCLUDED.submitted_at),
+  is_late_plan = sales_todo.is_late_plan;
 SQL
   then
     log "  #PLAN TODO insert failed: user=$USER_ID msg=$MSG_ID"
