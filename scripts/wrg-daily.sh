@@ -107,10 +107,11 @@ if [ "$JOB" = "report_check" ]; then
   if [ "$IS_WORKDAY" = "t" ]; then
     WEEKEND_FILTER=""
   else
-    WEEKEND_FILTER="AND EXISTS (SELECT 1 FROM sales_plan sp WHERE sp.user_id = mu.id AND sp.tanggal = CURRENT_DATE)"
+    WEEKEND_FILTER="AND (EXISTS (SELECT 1 FROM sales_plan sp WHERE sp.user_id = mu.id AND sp.tanggal = CURRENT_DATE)
+                     OR EXISTS (SELECT 1 FROM sales_todo st WHERE st.user_id = mu.id AND st.tanggal = CURRENT_DATE))"
   fi
 
-  # Per anggota: total plan vs total reported
+  # Per anggota: total plan vs total reported. Union AM mode (sales_plan) + TODO mode (sales_todo).
   ROWS=$($PSQL <<SQL
 WITH today_status AS (
   SELECT
@@ -118,33 +119,47 @@ WITH today_status AS (
     mu.wa_number,
     mu.nama,
     mu.last_active_group,
-    COUNT(sp.id)                                    AS total_plan,
-    COUNT(sp.id) FILTER (WHERE sp.reported = FALSE) AS total_unreported,
-    -- grup terakhir tempat user kirim #PLAN
-    (SELECT sp2.activity_id FROM sales_plan sp2
-       WHERE sp2.user_id = mu.id AND sp2.tanggal = CURRENT_DATE
-       ORDER BY sp2.submitted_at DESC LIMIT 1)      AS last_plan_aid,
-    ARRAY_AGG(sp.customer_name ORDER BY sp.seq)
-      FILTER (WHERE sp.reported = FALSE)            AS unreported_customers
+    COALESCE(sp.total_plan, 0)                          AS sp_total,
+    COALESCE(sp.total_unreported, 0)                    AS sp_unreported,
+    COALESCE(st.total_todo, 0)                          AS st_total,
+    CASE WHEN COALESCE(st.total_todo, 0) > 0
+              AND COALESCE(st.reported_count, 0) = 0
+         THEN 1 ELSE 0 END                              AS st_unreported,
+    sp.unreported_customers
   FROM master_user mu
-  LEFT JOIN sales_plan sp
-    ON sp.user_id = mu.id AND sp.tanggal = CURRENT_DATE
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*) AS total_plan,
+      COUNT(*) FILTER (WHERE reported = FALSE) AS total_unreported,
+      ARRAY_AGG(customer_name ORDER BY seq)
+        FILTER (WHERE reported = FALSE) AS unreported_customers
+    FROM sales_plan
+    WHERE user_id = mu.id AND tanggal = CURRENT_DATE
+  ) sp ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*) AS total_todo,
+      COUNT(*) FILTER (WHERE reported) AS reported_count
+    FROM sales_todo
+    WHERE user_id = mu.id AND tanggal = CURRENT_DATE
+  ) st ON TRUE
   WHERE mu.aktif = TRUE
     AND COALESCE(mu.wajib_plan_report, TRUE) = TRUE
     ${WEEKEND_FILTER}
-  GROUP BY mu.id, mu.wa_number, mu.nama, mu.last_active_group
 )
 SELECT
   wa_number || '|' ||
   COALESCE(nama,'') || '|' ||
   COALESCE(last_active_group,'') || '|' ||
-  total_plan || '|' ||
-  total_unreported || '|' ||
+  (sp_total + st_total) || '|' ||
+  (sp_unreported + st_unreported) || '|' ||
   COALESCE(array_to_string(unreported_customers, ';'), '')
 FROM today_status
 WHERE
-  (total_plan > 0 AND total_unreported > 0)  -- punya plan tapi belum semua report
-  OR (total_plan = 0)                         -- tidak punya plan sama sekali
+  -- punya plan/todo tapi belum semua report
+  ((sp_total + st_total) > 0 AND (sp_unreported + st_unreported) > 0)
+  -- atau gak punya plan/todo sama sekali (no-plan warning)
+  OR ((sp_total + st_total) = 0)
 ORDER BY nama;
 SQL
 )
@@ -178,8 +193,11 @@ fi
 
 # ── JOB 3 — daily_summary ───────────────────────────────────
 if [ "$JOB" = "daily_summary" ]; then
-  # Kumpulkan activity hari ini (compact CSV-ish format untuk AI)
+  # Kumpulkan activity hari ini. UNION dua sumber:
+  #   - activity_log (AM mode: customer visits, per-customer row)
+  #   - sales_todo + report_data (TODO mode: per-item, hanya yg sudah reported)
   ACTIVITY=$($PSQL <<SQL
+-- AM mode
 SELECT
   mu.nama || '|' ||
   COALESCE(mu.cabang, '') || '|' ||
@@ -194,20 +212,56 @@ FROM activity_log al
 JOIN master_user mu ON mu.id = al.user_id
 LEFT JOIN sales_plan sp ON sp.id = al.plan_id
 WHERE al.tanggal = CURRENT_DATE
-ORDER BY mu.cabang, mu.nama, al.id;
+
+UNION ALL
+
+-- TODO mode (per-item unnest dari report_data)
+SELECT
+  mu.nama || '|' ||
+  COALESCE(mu.cabang, '') || '|' ||
+  COALESCE(mu.role, '') || '|' ||
+  '' || '|' ||                                          -- no customer_name
+  COALESCE(item->>'task', '') || '|' ||                 -- task as hasil-equivalent
+  COALESCE(item->>'result', '') || '|' ||               -- result if any
+  COALESCE(item->>'status', 'matched') || '|' ||        -- matched/ambiguous/unmatched/etc
+  '' || '|' ||                                          -- no tujuan for TODO
+  ''                                                    -- no separate goal
+FROM sales_todo st
+JOIN master_user mu ON mu.id = st.user_id
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(st.report_data, '[]'::jsonb)) AS item
+WHERE st.tanggal = CURRENT_DATE AND st.reported = TRUE
+
+ORDER BY 1;
 SQL
 )
 
   ROW_COUNT=$(echo "$ACTIVITY" | grep -c "|" || echo 0)
 
-  # Stats
+  # Stats — union AM mode (activity_log) + TODO mode (sales_todo.report_data items).
   STATS=$($PSQL <<SQL
+WITH am AS (
+  SELECT user_id, is_unmatched FROM activity_log WHERE tanggal = CURRENT_DATE
+),
+todo_items AS (
+  SELECT st.user_id, COALESCE(item->>'status','matched') AS status
+  FROM sales_todo st
+  CROSS JOIN LATERAL jsonb_array_elements(COALESCE(st.report_data, '[]'::jsonb)) AS item
+  WHERE st.tanggal = CURRENT_DATE AND st.reported = TRUE
+)
 SELECT
-  (SELECT COUNT(DISTINCT user_id) FROM activity_log WHERE tanggal = CURRENT_DATE) || '|' ||
-  (SELECT COUNT(*) FROM activity_log WHERE tanggal = CURRENT_DATE) || '|' ||
-  (SELECT COUNT(*) FROM activity_log WHERE tanggal = CURRENT_DATE AND is_unmatched = FALSE) || '|' ||
-  (SELECT COUNT(*) FROM activity_log WHERE tanggal = CURRENT_DATE AND is_unmatched = TRUE) || '|' ||
-  (SELECT COUNT(DISTINCT user_id) FROM sales_plan WHERE tanggal = CURRENT_DATE);
+  (SELECT COUNT(DISTINCT user_id) FROM (
+     SELECT user_id FROM am UNION SELECT user_id FROM todo_items
+   ) u) || '|' ||
+  ((SELECT COUNT(*) FROM am) + (SELECT COUNT(*) FROM todo_items)) || '|' ||
+  ((SELECT COUNT(*) FROM am WHERE is_unmatched = FALSE)
+   + (SELECT COUNT(*) FROM todo_items WHERE status NOT IN ('unmatched'))) || '|' ||
+  ((SELECT COUNT(*) FROM am WHERE is_unmatched = TRUE)
+   + (SELECT COUNT(*) FROM todo_items WHERE status = 'unmatched')) || '|' ||
+  (SELECT COUNT(DISTINCT user_id) FROM (
+     SELECT user_id FROM sales_plan WHERE tanggal = CURRENT_DATE
+     UNION
+     SELECT user_id FROM sales_todo WHERE tanggal = CURRENT_DATE
+   ) p);
 SQL
 )
   IFS='|' read -r N_ANGGOTA N_REPORT N_MATCHED N_UNMATCHED N_PLAN <<< "$STATS"
