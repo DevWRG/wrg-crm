@@ -1056,38 +1056,44 @@ for D in "${DATES[@]}"; do
         $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE wa_number = '$WA_NUM';" >/dev/null 2>>"$LOG_DIR/daily.log"
       fi
       # Tier 5: shared-HP fallback. Per brief, format "#PLAN <nama panggilan>" ke
-      # grup dengan HP yang dipakai bersama. Extract first token after hashtag dari
-      # body, coba match ke panggilan (exact, case-insensitive).
+      # grup dengan HP yang dipakai bersama. Coba match panggilan dari first 3
+      # word-tokens setelah hashtag (handle "#plan Achmad surya" → Surya).
       if [ -z "$USER_ROW" ]; then
-        BODY_NAME=$(echo "$BODY" | python3 -c "
+        BODY_NAMES=$(echo "$BODY" | python3 -c "
 import sys, re
 b = sys.stdin.read()
-# Tolerate optional space between # and hashtag word: '# Plan Kolis' as well as '#Plan Kolis'.
-m = re.match(r'^\s*#\s*\w+\s+([A-Za-z]+)', b)
-print(m.group(1) if m else '', end='')
+# Skip hashtag word, then take up to 3 first letter-only tokens (skip date/numbers).
+m = re.match(r'^\s*#\s*\w+\s+(.{0,80})', b)
+if m:
+    tokens = re.findall(r'[A-Za-z]+', m.group(1))[:3]
+    print('\n'.join(tokens))
 " 2>/dev/null)
-        if [ -n "$BODY_NAME" ]; then
-          SAFE_BODY_NAME=$(echo "$BODY_NAME" | sed "s/'/''/g")
-          # First try exact panggilan match, else pg_trgm fuzzy (score ≥ 0.6).
-          # Pakai LOWER buat case-insensitive trigram comparison.
-          USER_ROW=$($PSQL -c "
-            SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
-                   CASE WHEN aktif THEN 't' ELSE 'f' END
-            FROM master_user
-            WHERE LOWER(panggilan) = LOWER('$SAFE_BODY_NAME')
-               OR (panggilan IS NOT NULL
-                   AND ABS(LENGTH(panggilan) - LENGTH('$SAFE_BODY_NAME')) <= 2
-                   AND similarity(LOWER(panggilan), LOWER('$SAFE_BODY_NAME')) >= 0.4)
-            ORDER BY
-              CASE WHEN LOWER(panggilan) = LOWER('$SAFE_BODY_NAME') THEN 0 ELSE 1 END,
-              similarity(LOWER(panggilan), LOWER('$SAFE_BODY_NAME')) DESC
-            LIMIT 1;
-          " 2>/dev/null | head -1)
-          if [ -n "$USER_ROW" ]; then
-            RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
-            $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
-            log "  matched via body shared-HP: '$BODY_NAME' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
-          fi
+        if [ -n "$BODY_NAMES" ]; then
+          # Try each token in order; first match wins
+          while IFS= read -r TOKEN; do
+            [ -z "$TOKEN" ] && continue
+            SAFE_TOKEN=$(echo "$TOKEN" | sed "s/'/''/g")
+            USER_ROW=$($PSQL -c "
+              SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
+                     CASE WHEN aktif THEN 't' ELSE 'f' END
+              FROM master_user
+              WHERE LOWER(panggilan) = LOWER('$SAFE_TOKEN')
+                 OR (panggilan IS NOT NULL
+                     AND ABS(LENGTH(panggilan) - LENGTH('$SAFE_TOKEN')) <= 2
+                     AND similarity(LOWER(panggilan), LOWER('$SAFE_TOKEN')) >= 0.4)
+              ORDER BY
+                CASE WHEN LOWER(panggilan) = LOWER('$SAFE_TOKEN') THEN 0 ELSE 1 END,
+                similarity(LOWER(panggilan), LOWER('$SAFE_TOKEN')) DESC
+              LIMIT 1;
+            " 2>/dev/null | head -1)
+            if [ -n "$USER_ROW" ]; then
+              RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
+              $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+              log "  matched via body shared-HP: '$TOKEN' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
+              BODY_NAME="$TOKEN"
+              break
+            fi
+          done <<<"$BODY_NAMES"
         fi
       fi
 
