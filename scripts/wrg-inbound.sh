@@ -134,12 +134,13 @@ parse_tanggal_from_body() {
   # Fallback to first 5 lines if no numbered item detected (AM mode, etc).
   [ -z "$HEADER" ] && HEADER=$(echo "$BODY" | head -5)
 
-  # Try slash format DD/MM/YYYY (tolerate optional space after slashes for typos).
-  local TGL_SLASH
-  TGL_SLASH=$(echo "$HEADER" | grep -oE '[0-9]{1,2}/ ?[0-9]{1,2}/ ?[0-9]{4}' | head -1)
-  if [ -n "$TGL_SLASH" ]; then
-    # Strip spaces, parse
-    local CLEAN="${TGL_SLASH// /}"
+  # Try slash/dash format DD/MM/YYYY or DD-MM-YYYY (tolerate optional space).
+  local TGL_RAW
+  TGL_RAW=$(echo "$HEADER" | grep -oE '[0-9]{1,2}[/-] ?[0-9]{1,2}[/-] ?[0-9]{4}' | head -1)
+  if [ -n "$TGL_RAW" ]; then
+    # Normalize: strip spaces, convert dash to slash for uniform parsing
+    local CLEAN="${TGL_RAW// /}"
+    CLEAN="${CLEAN//-//}"
     if [[ "$CLEAN" =~ ^([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})$ ]]; then
       printf "%04d-%02d-%02d" "${BASH_REMATCH[3]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
       return
@@ -995,7 +996,7 @@ for D in "${DATES[@]}"; do
 
       # Check if body has hashtag trigger (sebelum spawn DB write — performance)
       HASHTAG=""
-      if [[ "$BODY" =~ ^[[:space:]]*\#([Pp][Ll][Aa][Nn]|[Rr][Ee][Pp][Oo][Rr][Tt]|[Ll][Ee][Aa][Dd][Ss]|[Uu][Pp][Dd][Aa][Tt][Ee]) ]]; then
+      if [[ "$BODY" =~ ^[[:space:]]*\#[[:space:]]*([Pp][Ll][Aa][Nn]|[Rr][Ee][Pp][Oo][Rr][Tt]|[Ll][Ee][Aa][Dd][Ss]|[Uu][Pp][Dd][Aa][Tt][Ee]) ]]; then
         HASHTAG=$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
       else
         # Non-hashtag message: still update last_active_group (if sender resolvable)
@@ -1054,7 +1055,8 @@ for D in "${DATES[@]}"; do
         BODY_NAME=$(echo "$BODY" | python3 -c "
 import sys, re
 b = sys.stdin.read()
-m = re.match(r'^\s*#\w+\s+([A-Za-z]+)', b)
+# Tolerate optional space between # and hashtag word: '# Plan Kolis' as well as '#Plan Kolis'.
+m = re.match(r'^\s*#\s*\w+\s+([A-Za-z]+)', b)
 print(m.group(1) if m else '', end='')
 " 2>/dev/null)
         if [ -n "$BODY_NAME" ]; then
