@@ -127,7 +127,14 @@ activity_stats AS (
     COUNT(*)                                AS total_activity,
     COUNT(*) FILTER (WHERE is_unmatched)    AS unmatched_activity,
     COUNT(*) FILTER (WHERE NOT is_unmatched) AS matched_activity,
-    COUNT(DISTINCT user_id)                 AS users_with_report
+    -- users_with_report: union activity_log (AM mode) + sales_todo.reported (TODO mode)
+    (SELECT COUNT(DISTINCT user_id) FROM (
+       SELECT user_id FROM activity_log, params p2
+       WHERE tanggal BETWEEN p2.d1 AND p2.d2
+       UNION
+       SELECT user_id FROM sales_todo, params p3
+       WHERE tanggal BETWEEN p3.d1 AND p3.d2 AND reported
+    ) u)                                    AS users_with_report
   FROM activity_log al, params p
   WHERE al.tanggal BETWEEN p.d1 AND p.d2
 ),
@@ -247,7 +254,7 @@ SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role), '[]'::json) FROM (
     SUM(unmatched_activity)                               AS unmatched_activity,
     SUM(plan_late + todo_late)                            AS total_late,
     COUNT(*) FILTER (WHERE total_plan_visits + total_todos > 0) AS orang_dgn_plan,
-    COUNT(*) FILTER (WHERE total_activity > 0)            AS orang_dgn_report
+    COUNT(*) FILTER (WHERE total_activity > 0 OR todo_reported > 0) AS orang_dgn_report
   FROM per_orang
   GROUP BY role
 ) t;
@@ -267,7 +274,7 @@ SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.cabang), '[]'::json) FROM (
     SUM(unmatched_activity)                               AS unmatched_activity,
     SUM(plan_late + todo_late)                            AS total_late,
     COUNT(*) FILTER (WHERE total_plan_visits + total_todos > 0) AS orang_dgn_plan,
-    COUNT(*) FILTER (WHERE total_activity > 0)            AS orang_dgn_report,
+    COUNT(*) FILTER (WHERE total_activity > 0 OR todo_reported > 0) AS orang_dgn_report,
     STRING_AGG(DISTINCT role, ', ' ORDER BY role)         AS roles
   FROM per_orang
   GROUP BY cabang
