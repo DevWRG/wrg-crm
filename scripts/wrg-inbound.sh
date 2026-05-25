@@ -1051,11 +1051,19 @@ print(m.group(1) if m else '', end='')
 " 2>/dev/null)
         if [ -n "$BODY_NAME" ]; then
           SAFE_BODY_NAME=$(echo "$BODY_NAME" | sed "s/'/''/g")
+          # First try exact panggilan match, else pg_trgm fuzzy (score ≥ 0.6).
+          # Pakai LOWER buat case-insensitive trigram comparison.
           USER_ROW=$($PSQL -c "
             SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
                    CASE WHEN aktif THEN 't' ELSE 'f' END
             FROM master_user
             WHERE LOWER(panggilan) = LOWER('$SAFE_BODY_NAME')
+               OR (panggilan IS NOT NULL
+                   AND ABS(LENGTH(panggilan) - LENGTH('$SAFE_BODY_NAME')) <= 2
+                   AND similarity(LOWER(panggilan), LOWER('$SAFE_BODY_NAME')) >= 0.4)
+            ORDER BY
+              CASE WHEN LOWER(panggilan) = LOWER('$SAFE_BODY_NAME') THEN 0 ELSE 1 END,
+              similarity(LOWER(panggilan), LOWER('$SAFE_BODY_NAME')) DESC
             LIMIT 1;
           " 2>/dev/null | head -1)
           if [ -n "$USER_ROW" ]; then
