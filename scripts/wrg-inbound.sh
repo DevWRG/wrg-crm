@@ -127,20 +127,28 @@ is_too_future_date() {
 # Return ISO YYYY-MM-DD. Default: hari ini.
 parse_tanggal_from_body() {
   local BODY="$1"
-  local FIRST5
-  FIRST5=$(echo "$BODY" | head -5)
+  # Only scan HEADER (everything before first numbered item like "1.").
+  # Prevents matching dates inside task descriptions (mis. "Bank Jatim 22/05/2026").
+  local HEADER
+  HEADER=$(echo "$BODY" | awk '/^[[:space:]]*[0-9]+[\.\)]/{exit}{print}')
+  # Fallback to first 5 lines if no numbered item detected (AM mode, etc).
+  [ -z "$HEADER" ] && HEADER=$(echo "$BODY" | head -5)
 
-  # Try slash format DD/MM/YYYY first (incl. "tgl: DD/MM/YYYY")
+  # Try slash format DD/MM/YYYY (tolerate optional space after slashes for typos).
   local TGL_SLASH
-  TGL_SLASH=$(echo "$FIRST5" | grep -oE '\b[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\b' | head -1)
-  if [ -n "$TGL_SLASH" ] && [[ "$TGL_SLASH" =~ ^([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})$ ]]; then
-    printf "%04d-%02d-%02d" "${BASH_REMATCH[3]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
-    return
+  TGL_SLASH=$(echo "$HEADER" | grep -oE '[0-9]{1,2}/ ?[0-9]{1,2}/ ?[0-9]{4}' | head -1)
+  if [ -n "$TGL_SLASH" ]; then
+    # Strip spaces, parse
+    local CLEAN="${TGL_SLASH// /}"
+    if [[ "$CLEAN" =~ ^([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})$ ]]; then
+      printf "%04d-%02d-%02d" "${BASH_REMATCH[3]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
+      return
+    fi
   fi
 
   # Try month-name format "DD <Bulan> YYYY" via Python (handles Indonesian + English)
   local TGL_ISO
-  TGL_ISO=$(echo "$FIRST5" | python3 -c '
+  TGL_ISO=$(echo "$HEADER" | python3 -c '
 import sys, re
 text = sys.stdin.read().lower()
 months = {
