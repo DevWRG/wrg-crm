@@ -414,17 +414,43 @@ Contoh:
   USER_ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
   IS_LATE=$(compute_is_late "$TGL_ISO" "$USER_ROLE")
 
-  # Extract numbered items: "1. X", "2. Y", etc.
-  # Trim each, drop empty.
+  # Extract items. Support two formats:
+  #   1. Numbered list (canonical): "1. X" / "2. Y" per line
+  #   2. Pipe-separated inline: "#Plan X | item1 | item2 | ..." (Hanif-style)
+  # Pipe format auto-detected: kalau body single-line dgn ≥2 pipes & gak ada numbered item.
   local ITEMS_JSON
   ITEMS_JSON=$(echo "$BODY" | python3 -c '
 import sys, json, re
+text = sys.stdin.read()
+# Strip Unicode LRM (U+200E) yg sering muncul di body iOS WA
+text = text.replace("‎", "")
 items = []
-for line in sys.stdin:
-    line = line.rstrip()
-    m = re.match(r"^\s*(\d+)[.)]\s*(.+?)\s*$", line)
+def is_skippable(s):
+    s = s.strip()
+    if not s:
+        return True
+    if re.match(r"^#?\s*(plan|report|leads|update)\b", s, re.IGNORECASE):
+        return True
+    if re.match(r"^\d{1,2}[/-]\s*\d{1,2}[/-]\s*\d{4}$", s):
+        return True
+    return False
+# 1. Numbered format
+for line in text.splitlines():
+    m = re.match(r"^\s*(\d+)[.)]\s*(.+?)\s*$", line.rstrip())
     if m:
         items.append(m.group(2).strip())
+# 2. Pipe-separated inline (single-line dgn ≥2 pipes)
+if not items and text.count("|") >= 2:
+    for p in text.split("|"):
+        p = p.strip()
+        if not is_skippable(p):
+            items.append(p)
+# 3. Line-based fallback: each non-empty non-header line = item
+if not items:
+    for line in text.splitlines():
+        line = line.strip()
+        if not is_skippable(line):
+            items.append(line)
 print(json.dumps(items, ensure_ascii=False))
 ' 2>/dev/null)
 
@@ -1003,7 +1029,10 @@ for D in "${DATES[@]}"; do
 
       # Check if body has hashtag trigger (sebelum spawn DB write — performance)
       HASHTAG=""
-      if [[ "$BODY" =~ ^[[:space:]]*\#[[:space:]]*([Pp][Ll][Aa][Nn]|[Rr][Ee][Pp][Oo][Rr][Tt]|[Ll][Ee][Aa][Dd][Ss]|[Uu][Pp][Dd][Aa][Tt][Ee]) ]]; then
+      # Hashtag detection: cari #PLAN/REPORT/LEADS/UPDATE di body manapun (bukan
+      # cuma awal). Beberapa user kirim format inline dgn date prefix sebelum #,
+      # mis. "25/5/2026 | #Plan Hanif | 1. ..." — anchor ^ bikin miss.
+      if [[ "$BODY" =~ \#[[:space:]]*([Pp][Ll][Aa][Nn]|[Rr][Ee][Pp][Oo][Rr][Tt]|[Ll][Ee][Aa][Dd][Ss]|[Uu][Pp][Dd][Aa][Tt][Ee]) ]]; then
         HASHTAG=$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
       else
         # Non-hashtag message: still update last_active_group (if sender resolvable)
