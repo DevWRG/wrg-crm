@@ -1039,6 +1039,33 @@ for D in "${DATES[@]}"; do
       elif [ -n "$USER_ROW" ]; then
         $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE wa_number = '$WA_NUM';" >/dev/null 2>>"$LOG_DIR/daily.log"
       fi
+      # Tier 5: shared-HP fallback. Per brief, format "#PLAN <nama panggilan>" ke
+      # grup dengan HP yang dipakai bersama. Extract first token after hashtag dari
+      # body, coba match ke panggilan (exact, case-insensitive).
+      if [ -z "$USER_ROW" ]; then
+        BODY_NAME=$(echo "$BODY" | python3 -c "
+import sys, re
+b = sys.stdin.read()
+m = re.match(r'^\s*#\w+\s+([A-Za-z]+)', b)
+print(m.group(1) if m else '', end='')
+" 2>/dev/null)
+        if [ -n "$BODY_NAME" ]; then
+          SAFE_BODY_NAME=$(echo "$BODY_NAME" | sed "s/'/''/g")
+          USER_ROW=$($PSQL -c "
+            SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
+                   CASE WHEN aktif THEN 't' ELSE 'f' END
+            FROM master_user
+            WHERE LOWER(panggilan) = LOWER('$SAFE_BODY_NAME')
+            LIMIT 1;
+          " 2>/dev/null | head -1)
+          if [ -n "$USER_ROW" ]; then
+            RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
+            $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+            log "  matched via body shared-HP: '$BODY_NAME' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
+          fi
+        fi
+      fi
+
       if [ -z "$USER_ROW" ]; then
         wa_send "$GROUP_JID" "❌ Nomor kamu belum terdaftar di sistem WRG CRM.
 Hubungi admin untuk registrasi."
