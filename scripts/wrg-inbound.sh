@@ -841,12 +841,16 @@ ambig        = float(os.environ.get("AMBIG","0.40"))
 pguser       = os.environ.get("PGUSER","wrg_admin")
 pgdb         = os.environ.get("PGDATABASE","wrg_crm")
 
-def sim(a, b):
-    a_esc = a.replace("'", "''")
-    b_esc = b.replace("'", "''")
+def sim(report_text, plan_text):
+    # GREATEST(similarity, word_similarity):
+    # - similarity = symmetric, baik kalau dua string mirip overall
+    # - word_similarity(plan, report) = high kalau plan substantially di-contain di report
+    #   (e.g., report = plan + ", selesai" → word_sim=1.0)
+    a_esc = report_text.replace("'", "''")
+    b_esc = plan_text.replace("'", "''")
     r = subprocess.run(
         ["psql","-U",pguser,"-d",pgdb,"-tA","-c",
-         f"SELECT similarity('{a_esc}', '{b_esc}');"],
+         f"SELECT GREATEST(similarity('{a_esc}', '{b_esc}'), word_similarity('{b_esc}', '{a_esc}'));"],
         capture_output=True, text=True, timeout=5)
     try: return float(r.stdout.strip())
     except: return 0.0
