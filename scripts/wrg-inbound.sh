@@ -1110,6 +1110,11 @@ score = 80
 for t in toks:
     parts.append(f\"SELECT id, nama, aktif, {score} AS s, '{t}' AS matched FROM master_user WHERE LOWER(panggilan) = LOWER('{t}')\")
     score -= 2
+# Nama exact match (single token equals full nama, e.g., 'Maskhanudin' → nama 'Maskhanudin')
+score = 70
+for t in toks:
+    parts.append(f\"SELECT id, nama, aktif, {score} AS s, '{t}' AS matched FROM master_user WHERE LOWER(nama) = LOWER('{t}')\")
+    score -= 2
 # Nama starts with token (single-token prefix)
 score = 60
 for t in toks:
