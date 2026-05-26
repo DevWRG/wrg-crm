@@ -1085,44 +1085,59 @@ for D in "${DATES[@]}"; do
         $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE wa_number = '$WA_NUM';" >/dev/null 2>>"$LOG_DIR/daily.log"
       fi
       # Tier 5: shared-HP fallback. Per brief, format "#PLAN <nama panggilan>" ke
-      # grup dengan HP yang dipakai bersama. Coba match panggilan dari first 3
-      # word-tokens setelah hashtag (handle "#plan Achmad surya" → Surya).
+      # grup dengan HP yang dipakai bersama. Scoring-based match — prefer
+      # multi-token full-name substring of nama (most specific) over single-token
+      # panggilan match. Avoid mis-resolve "Najmi Putri Harini" → Putri Diana.
       if [ -z "$USER_ROW" ]; then
-        BODY_NAMES=$(echo "$BODY" | python3 -c "
+        BODY_QUERY=$(echo "$BODY" | python3 -c "
 import sys, re
 b = sys.stdin.read()
-# Skip hashtag word, then take up to 3 first letter-only tokens (skip date/numbers).
 m = re.match(r'^\s*#\s*\w+\s+(.{0,80})', b)
-if m:
-    tokens = re.findall(r'[A-Za-z]+', m.group(1))[:3]
-    print('\n'.join(tokens))
+if not m: sys.exit(0)
+toks = re.findall(r'[A-Za-z]+', m.group(1))[:3]
+if not toks: sys.exit(0)
+parts = []
+# Multi-token name substring (longer phrase = higher score)
+if len(toks) >= 2:
+    score = 100
+    for n in range(len(toks), 1, -1):
+        for i in range(len(toks) - n + 1):
+            phrase = ' '.join(toks[i:i+n])
+            parts.append(f\"SELECT id, nama, aktif, {score} AS s, '{phrase}' AS matched FROM master_user WHERE POSITION(LOWER('{phrase}') IN LOWER(nama)) > 0\")
+            score -= 5
+# Panggilan exact
+score = 80
+for t in toks:
+    parts.append(f\"SELECT id, nama, aktif, {score} AS s, '{t}' AS matched FROM master_user WHERE LOWER(panggilan) = LOWER('{t}')\")
+    score -= 2
+# Nama starts with token (single-token prefix)
+score = 60
+for t in toks:
+    parts.append(f\"SELECT id, nama, aktif, {score} AS s, '{t}' AS matched FROM master_user WHERE LOWER(nama) LIKE LOWER('{t}') || ' %'\")
+    score -= 2
+# Fuzzy panggilan
+score = 40
+for t in toks:
+    parts.append(f\"SELECT id, nama, aktif, {score} AS s, '{t}' AS matched FROM master_user WHERE panggilan IS NOT NULL AND ABS(LENGTH(panggilan) - LENGTH('{t}')) <= 2 AND similarity(LOWER(panggilan), LOWER('{t}')) >= 0.4\")
+    score -= 2
+print(' UNION ALL '.join(parts))
 " 2>/dev/null)
-        if [ -n "$BODY_NAMES" ]; then
-          # Try each token in order; first match wins
-          while IFS= read -r TOKEN; do
-            [ -z "$TOKEN" ] && continue
-            SAFE_TOKEN=$(echo "$TOKEN" | sed "s/'/''/g")
-            USER_ROW=$($PSQL -c "
-              SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
-                     CASE WHEN aktif THEN 't' ELSE 'f' END
-              FROM master_user
-              WHERE LOWER(panggilan) = LOWER('$SAFE_TOKEN')
-                 OR (panggilan IS NOT NULL
-                     AND ABS(LENGTH(panggilan) - LENGTH('$SAFE_TOKEN')) <= 2
-                     AND similarity(LOWER(panggilan), LOWER('$SAFE_TOKEN')) >= 0.4)
-              ORDER BY
-                CASE WHEN LOWER(panggilan) = LOWER('$SAFE_TOKEN') THEN 0 ELSE 1 END,
-                similarity(LOWER(panggilan), LOWER('$SAFE_TOKEN')) DESC
-              LIMIT 1;
-            " 2>/dev/null | head -1)
-            if [ -n "$USER_ROW" ]; then
-              RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
-              $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
-              log "  matched via body shared-HP: '$TOKEN' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
-              BODY_NAME="$TOKEN"
-              break
-            fi
-          done <<<"$BODY_NAMES"
+        if [ -n "$BODY_QUERY" ]; then
+          BEST_ROW=$($PSQL -c "
+            SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
+                   CASE WHEN aktif THEN 't' ELSE 'f' END || E'\t' || matched
+            FROM ($BODY_QUERY) candidates
+            ORDER BY s DESC, LENGTH(nama) ASC
+            LIMIT 1;
+          " 2>/dev/null | head -1)
+          if [ -n "$BEST_ROW" ]; then
+            RESOLVED_ID=$(echo "$BEST_ROW" | cut -f1)
+            MATCHED=$(echo "$BEST_ROW" | cut -f4)
+            USER_ROW=$(echo "$BEST_ROW" | cut -f1-3)
+            $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+            log "  matched via body shared-HP: '$MATCHED' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
+            BODY_NAME="$MATCHED"
+          fi
         fi
       fi
 
