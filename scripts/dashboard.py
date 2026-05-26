@@ -991,7 +991,12 @@ const state = {
 
 // ── Date helpers ──────────────────────────────────────────────────────
 function fmt(d) {
-  return d.toISOString().slice(0, 10);
+  // Local date components (NOT toISOString — that converts ke UTC, bikin midnight
+  // WIB jadi previous day di UTC).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 function parseDate(s) { return new Date(s + "T00:00:00"); }
 function today() { return new Date(new Date().toDateString()); }
@@ -1214,7 +1219,7 @@ function renderTrend(days) {
 
   // X-axis date labels (sparse if many days)
   const labelEvery = Math.max(1, Math.ceil(n / 14));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = fmt(new Date());
   enriched.forEach((d, i) => {
     if (i % labelEvery !== 0 && i !== n - 1) return;
     const x = xAt(i);
