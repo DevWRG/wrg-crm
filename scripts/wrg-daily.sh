@@ -371,24 +371,15 @@ ${NO_REPORT_CSV}"
   TS=$(date '+%Y-%m-%d_%H%M')
   echo "$SUMMARY" > "$OUT_DIR/summary_${TS}.txt"
 
-  # Kirim ke last_active_group setiap HOD + Direktur
-  TARGETS=$($PSQL -c "
-SELECT DISTINCT last_active_group
-FROM master_user
-WHERE role IN ('HOD', 'Direktur')
-  AND aktif = TRUE
-  AND last_active_group IS NOT NULL
-  AND last_active_group <> '';
-" 2>/dev/null)
-
+  # Kirim ke grup HOD Squad (hardcoded). Sebelumnya kirim ke last_active_group
+  # tiap HOD individu — bikin summary nyebar ke grup divisi (GA, dll) yg gak
+  # relevant. HOD Squad = grup khusus semua HOD, single source.
+  HOD_SQUAD_JID="120363042143432430@g.us"
   SENT=0
-  while IFS= read -r GROUP; do
-    GROUP=$(echo "$GROUP" | tr -d ' ')
-    [ -z "$GROUP" ] && continue
-    wa_send "$GROUP" "$SUMMARY" && SENT=$((SENT + 1))
-    sleep 0.5
-  done <<< "$TARGETS"
+  if wa_send "$HOD_SQUAD_JID" "$SUMMARY"; then
+    SENT=1
+  fi
 
-  log "daily_summary — rows=$ROW_COUNT sent=$SENT — saved: $OUT_DIR/summary_${TS}.txt"
+  log "daily_summary — rows=$ROW_COUNT sent=$SENT (HOD Squad) — saved: $OUT_DIR/summary_${TS}.txt"
   exit 0
 fi
