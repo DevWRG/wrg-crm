@@ -82,9 +82,21 @@ late_threshold_for_role() {
 compute_is_late() {
   local TGL_ISO="$1"
   local ROLE="${2:-}"
+  local MSG_TS_S="${3:-}"     # epoch detik dari JSONL ts_ms (optional)
   local THRESHOLD
   THRESHOLD=$(late_threshold_for_role "$ROLE")
-  if [ "$TGL_ISO" = "$(date '+%Y-%m-%d')" ] && [ "$(date '+%H%M')" -gt "$THRESHOLD" ]; then
+  # Pakai MSG_TS_S kalau ada (kapan user kirim), bukan waktu cron processing.
+  # Tanpa ini, message yg di-process telat (mis. setelah cursor rollback) jadi
+  # salah flagged late walaupun user submit ontime.
+  local SUBMIT_DATE SUBMIT_HHMM
+  if [ -n "$MSG_TS_S" ]; then
+    SUBMIT_DATE=$(date -r "$MSG_TS_S" '+%Y-%m-%d')
+    SUBMIT_HHMM=$(date -r "$MSG_TS_S" '+%H%M')
+  else
+    SUBMIT_DATE=$(date '+%Y-%m-%d')
+    SUBMIT_HHMM=$(date '+%H%M')
+  fi
+  if [ "$TGL_ISO" = "$SUBMIT_DATE" ] && [ "$SUBMIT_HHMM" -gt "$THRESHOLD" ]; then
     echo "TRUE"
   else
     echo "FALSE"
@@ -247,7 +259,7 @@ parse_name_from_body() {
 # Parse "cust: X, tujuan: Y, goal: Z" (single) atau "C | T | G" (multi)
 # Insert ke sales_plan dengan ON CONFLICT UPDATE.
 handle_plan_am() {
-  local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4"
+  local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_TS_S="${5:-}"
   local TGL_ISO IS_LATE
   TGL_ISO=$(parse_tanggal_from_body "$BODY")
   if is_past_date "$TGL_ISO"; then
@@ -273,7 +285,7 @@ cust: ..."
     return 1
   fi
   # AM role is hard-coded here (this is the AM-mode handler) → lapangan = 08:00.
-  IS_LATE=$(compute_is_late "$TGL_ISO" "AM")
+  IS_LATE=$(compute_is_late "$TGL_ISO" "AM" "$MSG_TS_S")
 
   local CUSTS=() TUJUANS=() GOALS=()
   if echo "$BODY" | grep -qE '^[^#]*\|[^|]+\|'; then
@@ -341,12 +353,13 @@ tgl: DD/MM/YYYY
     T_NORM=$(normalize_tujuan "${TUJUANS[$i]}")
     if psql -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 -q <<SQL >/dev/null 2>>"$LOG_DIR/daily.log"
 INSERT INTO sales_plan (user_id, tanggal, customer_name, tujuan, goal, seq, submitted_at, is_late_plan)
-VALUES ($USER_ID, '$TGL_ISO', \$\$$C\$\$, \$\$$T_NORM\$\$, \$\$$G\$\$, $SEQ, NOW(), $IS_LATE)
+VALUES ($USER_ID, '$TGL_ISO', \$\$$C\$\$, \$\$$T_NORM\$\$, \$\$$G\$\$, $SEQ,
+        COALESCE(to_timestamp(NULLIF('$MSG_TS_S','')::bigint), NOW()), $IS_LATE)
 ON CONFLICT (user_id, tanggal, customer_name) DO UPDATE SET
   tujuan       = EXCLUDED.tujuan,
   goal         = EXCLUDED.goal,
-  submitted_at = EXCLUDED.submitted_at,
-  is_late_plan = EXCLUDED.is_late_plan;
+  submitted_at = LEAST(sales_plan.submitted_at, EXCLUDED.submitted_at),
+  is_late_plan = sales_plan.is_late_plan;
 SQL
     then
       SUCCESS=$((SUCCESS + 1))
@@ -386,7 +399,7 @@ SQL
 # Parse numbered list "1. ..., 2. ..., 3. ..." dari body, insert sebagai 1 row
 # di sales_todo dengan items JSONB array.
 handle_plan_todo() {
-  local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
+  local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5" MSG_TS_S="${6:-}"
   local TGL_ISO IS_LATE
   TGL_ISO=$(parse_tanggal_from_body "$BODY")
   if is_past_date "$TGL_ISO"; then
@@ -412,7 +425,7 @@ Contoh:
   # TODO mode = non-AM. Lookup role for threshold (non-lapangan → 08:30).
   local USER_ROLE
   USER_ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
-  IS_LATE=$(compute_is_late "$TGL_ISO" "$USER_ROLE")
+  IS_LATE=$(compute_is_late "$TGL_ISO" "$USER_ROLE" "$MSG_TS_S")
 
   # Extract items. Support two formats:
   #   1. Numbered list (canonical): "1. X" / "2. Y" per line
@@ -472,7 +485,8 @@ Pakai numbered list:
   SAFE_BODY=$(echo "$BODY" | sed "s/\$\$//g")
   if ! psql -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 -q <<SQL >/dev/null 2>>"$LOG_DIR/daily.log"
 INSERT INTO sales_todo (user_id, tanggal, items, raw_body, message_id, submitted_at, is_late_plan)
-VALUES ($USER_ID, '$TGL_ISO', \$ITEMS\$$ITEMS_JSON\$ITEMS\$::jsonb, \$BODY\$$SAFE_BODY\$BODY\$, \$MID\$$MSG_ID\$MID\$, NOW(), $IS_LATE)
+VALUES ($USER_ID, '$TGL_ISO', \$ITEMS\$$ITEMS_JSON\$ITEMS\$::jsonb, \$BODY\$$SAFE_BODY\$BODY\$, \$MID\$$MSG_ID\$MID\$,
+        COALESCE(to_timestamp(NULLIF('$MSG_TS_S','')::bigint), NOW()), $IS_LATE)
 ON CONFLICT (user_id, tanggal) DO UPDATE SET
   items        = EXCLUDED.items,
   raw_body     = EXCLUDED.raw_body,
@@ -516,13 +530,13 @@ SQL
 
 # Top-level dispatcher: route by master_user.role.
 handle_plan() {
-  local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
+  local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5" MSG_TS_S="${6:-}"
   local ROLE
   ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
   if [ "$ROLE" = "AM" ]; then
-    handle_plan_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY"
+    handle_plan_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_TS_S"
   else
-    handle_plan_todo "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"
+    handle_plan_todo "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MSG_TS_S"
   fi
 }
 
@@ -1174,7 +1188,7 @@ Hubungi admin untuk mengaktifkan kembali."
       DISPLAY_NAME="${NAMA:-$WA_NUM_PLUS}"
       case "$HASHTAG" in
         plan)
-          if handle_plan "$USER_ID" "$DISPLAY_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"; then
+          if handle_plan "$USER_ID" "$DISPLAY_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$TS_S"; then
             FINAL_STATUS="DONE"
           else
             FINAL_STATUS="ERROR"
