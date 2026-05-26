@@ -271,37 +271,81 @@ SQL
     exit 0
   fi
 
+  # Total wajib & non-reporters — biar AI gak hallucinate count + nama
+  N_WAJIB=$($PSQL -c "SELECT COUNT(*) FROM master_user WHERE aktif AND wajib_plan_report;" 2>/dev/null | head -1 | tr -d ' ')
+  NO_PLAN_LIST=$($PSQL <<SQL
+SELECT COALESCE(nama, panggilan, wa_number)
+FROM master_user mu
+WHERE aktif AND wajib_plan_report
+  AND NOT EXISTS (SELECT 1 FROM sales_plan WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
+  AND NOT EXISTS (SELECT 1 FROM sales_todo WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
+ORDER BY nama;
+SQL
+)
+  NO_REPORT_LIST=$($PSQL <<SQL
+SELECT COALESCE(nama, panggilan, wa_number)
+FROM master_user mu
+WHERE aktif AND wajib_plan_report
+  -- punya plan/todo hari ini
+  AND (EXISTS (SELECT 1 FROM sales_plan WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
+       OR EXISTS (SELECT 1 FROM sales_todo WHERE user_id=mu.id AND tanggal=CURRENT_DATE))
+  -- tapi belum report
+  AND NOT EXISTS (SELECT 1 FROM activity_log WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
+  AND NOT EXISTS (SELECT 1 FROM sales_todo WHERE user_id=mu.id AND tanggal=CURRENT_DATE AND reported)
+ORDER BY nama;
+SQL
+)
+
   HARI=$(LC_TIME=id_ID date '+%A')
   TANGGAL=$(date '+%-d %B %Y')
 
   SYS_PROMPT="Kamu adalah WRG CRM Daily Summary Generator.
 Buat ringkasan harian aktivitas tim sales PT Wahana Rizky Gumilang.
 
+CRITICAL RULES:
+- JANGAN mengarang nama, angka, atau fakta yg tidak ada di data input.
+- Section 'Perhatian' HANYA pakai nama dari list 'NON_REPORTERS' & 'NO_PLAN' yg di-input.
+  Kalau list kosong, tulis '(semua wajib user sudah submit)'.
+- Angka 'anggota aktif dari N tim' pakai N=anggota_aktif/wajib_total dari STATS.
+- Per Area hanya sebut cabang yg muncul di DATA INPUT.
+
 FORMAT OUTPUT WAJIB (plain text, JANGAN pakai markdown header ##):
 📊 *Daily Summary — ${HARI}, ${TANGGAL}*
 
 *Overview*
-• {N} anggota aktif dari {total} tim
+• {anggota_aktif} dari {wajib_total} tim wajib aktif lapor
 • {total_report} laporan masuk
 • {matched}% sesuai plan, {unmatched} aktivitas di luar plan
 
 *Per Area*
-[untuk setiap area: ringkasan 2-3 kalimat tentang aktivitas hari ini]
+[untuk setiap area yg muncul di data: ringkasan 2-3 kalimat]
 
 *Highlight*
 [maks 3 poin penting hari ini — deal hot, prospek baru, warning]
 
 *Perhatian*
-[anggota yang tidak plan/report hari ini, jika ada]
+[copy nama dari NON_REPORTERS & NO_PLAN list, jangan ngarang]
 
 Gunakan Bahasa Indonesia. Singkat, informatif, eksekutif. Maksimal 30 baris."
+
+  # Encode lists untuk AI input
+  NO_PLAN_CSV=$(echo "$NO_PLAN_LIST" | grep -v '^$' | paste -sd ", " - 2>/dev/null || echo "(kosong)")
+  NO_REPORT_CSV=$(echo "$NO_REPORT_LIST" | grep -v '^$' | paste -sd ", " - 2>/dev/null || echo "(kosong)")
+  [ -z "$NO_PLAN_CSV" ] && NO_PLAN_CSV="(kosong)"
+  [ -z "$NO_REPORT_CSV" ] && NO_REPORT_CSV="(kosong)"
 
   USR_MSG="DATA INPUT (CSV pipe-delimited: nama|cabang|role|customer|hasil|next_action|matched/unmatched|plan_tujuan|plan_goal):
 
 ${ACTIVITY}
 
 STATS:
-anggota_aktif=${N_ANGGOTA} | total_report=${N_REPORT} | matched=${N_MATCHED} | unmatched=${N_UNMATCHED} | anggota_punya_plan=${N_PLAN}"
+anggota_aktif=${N_ANGGOTA} | wajib_total=${N_WAJIB} | total_report=${N_REPORT} | matched=${N_MATCHED} | unmatched=${N_UNMATCHED} | anggota_punya_plan=${N_PLAN}
+
+NO_PLAN (wajib tapi tidak submit plan hari ini):
+${NO_PLAN_CSV}
+
+NON_REPORTERS (sudah submit plan tapi belum report):
+${NO_REPORT_CSV}"
 
   log "daily_summary — calling AI: rows=$ROW_COUNT anggota=$N_ANGGOTA"
   SUMMARY=$(call_ai_with_fallback "$SYS_PROMPT" "$USR_MSG" 4000)
