@@ -55,8 +55,8 @@ harian. AM & Teknisi menyusul nanti.
 ⏰ DEADLINE #REPORT: sebelum *20:30*
 - Lewat batas: bot tetap terima, tapi di-flag "late"
 
-🔔 REMINDER:
-- 08:30 — kalau belum #PLAN, bot kirim DM
+🔔 REMINDER (08:15, 15 menit sebelum deadline):
+- 08:15 — kalau belum #PLAN, bot kirim DM (nudge sebelum deadline 08:30)
 - 20:30 — kalau ada #PLAN tapi belum #REPORT, bot kirim DM
 
 ❓ TANYA:

@@ -200,7 +200,7 @@ Output: `exports/wrg-report-{from}_{to}-{timestamp}.pdf` (~660KB, 7 halaman).
 
 ```
 */1 * * * *   wrg-inbound.sh          → poll WA & dispatch ke skill
-30  8 * * *   wrg-daily.sh plan_check  → reminder yg belum kirim plan (batch 1)
+15  8 * * *   wrg-daily.sh plan_check  → reminder yg belum kirim plan (batch 1, 15-min nudge before deadline 08:30)
 30 20 * * *   wrg-daily.sh report_check → reminder AM yg belum kirim report
 0  22 * * 1-5 wrg-daily.sh daily_summary → AI summary ke admin
 0   2 * * *   backup_pg.sh             → pg_dump nightly
