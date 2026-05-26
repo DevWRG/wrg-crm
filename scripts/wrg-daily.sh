@@ -176,12 +176,21 @@ SQL
       BODY="⚠️ ${NAMA} tidak ada plan maupun report hari ini."
       wa_send "$GROUP" "$BODY" && WARNED_NOPLAN=$((WARNED_NOPLAN + 1))
     else
-      # Punya plan, belum semua report
-      CUST_LIST=$(echo "$UNREP_CUSTS" | tr ';' '\n' | sed 's/^/  • /')
-      BODY="⚠️ *Pengingat #REPORT, ${NAMA}*
+      # Punya plan, belum semua report.
+      # AM mode: sales_plan punya customer_name list di unreported_customers.
+      # TODO mode: sales_todo gak punya customer, list kosong → pesan tanpa bullet.
+      if [ -n "$UNREP_CUSTS" ]; then
+        CUST_LIST=$(echo "$UNREP_CUSTS" | tr ';' '\n' | sed 's/^/  • /')
+        BODY="⚠️ *Pengingat #REPORT, ${NAMA}*
 Masih ada ${TOT_UNREPORTED} customer belum direport:
 ${CUST_LIST}
 Kirim #REPORT sebelum selesai hari ini ya."
+      else
+        # TODO mode: tidak ada bullet, pesan generic
+        BODY="⚠️ *Pengingat #REPORT, ${NAMA}*
+Plan kamu hari ini belum di-report.
+Kirim #REPORT sebelum 20:30 ya."
+      fi
       wa_send "$GROUP" "$BODY" && WARNED_PARTIAL=$((WARNED_PARTIAL + 1))
     fi
     sleep 0.3
