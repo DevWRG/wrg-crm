@@ -103,7 +103,7 @@ wrg-crm/
 │   └── wrg-daily/                 plan_check, report_check, daily_summary cron job logic
 └── scripts/
     ├── wrg-inbound.sh             Cron 1m: poll openclaw, dispatch ke skill
-    ├── wrg-daily.sh               Cron daily: reminder plan (08:30), report (20:30), summary (22:00)
+    ├── wrg-daily.sh               Cron daily: reminder plan (08:15), report (20:30), summary (22:00)
     ├── dashboard.py               HTTP server :8091 — plan/report dashboard
     ├── reload-dashboard.sh        Sync ke ~/wrg-crm-runtime/ + restart launchd
     ├── seed_demo_data.py          Generate realistic demo data di dev DB
