@@ -424,7 +424,7 @@ Contoh:
   fi
   # TODO mode = non-AM. Lookup role for threshold (non-lapangan → 08:30).
   local USER_ROLE
-  USER_ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
+  USER_ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1)
   IS_LATE=$(compute_is_late "$TGL_ISO" "$USER_ROLE" "$MSG_TS_S")
 
   # Extract items. Support two formats:
@@ -532,7 +532,7 @@ SQL
 handle_plan() {
   local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5" MSG_TS_S="${6:-}"
   local ROLE
-  ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
+  ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1)
   if [ "$ROLE" = "AM" ]; then
     handle_plan_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_TS_S"
   else
@@ -951,7 +951,7 @@ PYEOF
 handle_report() {
   local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
   local ROLE
-  ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1 | tr -d ' ')
+  ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1)
   if [ "$ROLE" = "AM" ]; then
     handle_report_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"
   else
