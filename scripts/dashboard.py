@@ -55,7 +55,16 @@ def current_env() -> str:
     return "dev"
 
 
+# Optional hard override for the underlying DB, bypassing env-state files
+# entirely. Set this on a dedicated dashboard instance to pin it to a specific
+# database (e.g. WRG_DB_OVERRIDE=wrg_crm_dev for the :8092 dev dashboard) so it
+# stays on its own DB regardless of env-switch.sh activity affecting prod.
+_DB_OVERRIDE = os.environ.get("WRG_DB_OVERRIDE", "").strip()
+
+
 def db_name(env: str | None = None) -> str:
+    if _DB_OVERRIDE:
+        return _DB_OVERRIDE
     env = env or current_env()
     return "wrg_crm_prod" if env == "prod" else "wrg_crm_dev"
 
