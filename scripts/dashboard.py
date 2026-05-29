@@ -147,6 +147,20 @@ activity_stats AS (
   FROM activity_log al, params p
   WHERE al.tanggal BETWEEN p.d1 AND p.d2
 ),
+todo_report_stats AS (
+  -- Aggregate matched/unmatched dari sales_todo.report_data jsonb (TODO mode).
+  SELECT
+    COALESCE(SUM(
+      (SELECT COUNT(*) FROM jsonb_array_elements(COALESCE(report_data, '[]'::jsonb)) AS r
+       WHERE r->>'status' = 'matched')
+    ), 0) AS todo_items_matched,
+    COALESCE(SUM(
+      (SELECT COUNT(*) FROM jsonb_array_elements(COALESCE(report_data, '[]'::jsonb)) AS r
+       WHERE r->>'status' IN ('ambiguous','unmatched'))
+    ), 0) AS todo_items_unmatched
+  FROM sales_todo, params p
+  WHERE tanggal BETWEEN p.d1 AND p.d2
+),
 user_counts AS (
   SELECT
     COUNT(*) FILTER (WHERE aktif AND wajib_plan_report) AS users_wajib,
@@ -169,6 +183,8 @@ SELECT row_to_json(t) FROM (
     (SELECT unmatched_activity FROM activity_stats) AS unmatched_activity,
     (SELECT matched_activity FROM activity_stats)  AS matched_activity,
     (SELECT users_with_report FROM activity_stats) AS users_with_report,
+    (SELECT todo_items_matched FROM todo_report_stats)    AS todo_items_matched,
+    (SELECT todo_items_unmatched FROM todo_report_stats)  AS todo_items_unmatched,
     (SELECT users_wajib FROM user_counts)      AS users_wajib,
     (SELECT users_aktif FROM user_counts)      AS users_aktif
 ) t;
@@ -1155,10 +1171,14 @@ function enrichHod(r) {
 // ── KPI rendering ─────────────────────────────────────────────────────
 function renderKPI(s) {
   const totalPlan = (s.total_plan_visits || 0) + (s.total_todo_items || 0);
-  const totalReportedApprox = (s.plan_reported || 0) + (s.todo_reported || 0);
+  // totalReported: plan_reported (AM) + todo_items_matched (TODO actual count) for true completion%.
+  const totalReportedApprox = (s.plan_reported || 0) + (s.todo_items_matched || 0);
   const totalLate = (s.plan_late || 0) + (s.todo_late || 0);
   const compPct = totalPlan > 0 ? Math.round(totalReportedApprox / totalPlan * 100) : null;
-  const matchPct = s.total_activity > 0 ? Math.round(s.matched_activity / s.total_activity * 100) : null;
+  // matchPct denominator includes both AM activity_log + TODO report items.
+  const totalReportItems = (s.total_activity || 0) + (s.todo_items_matched || 0) + (s.todo_items_unmatched || 0);
+  const totalMatchedItems = (s.matched_activity || 0) + (s.todo_items_matched || 0);
+  const matchPct = totalReportItems > 0 ? Math.round(totalMatchedItems / totalReportItems * 100) : null;
 
   const kpis = [
     { label: "Hari kerja", value: s.working_days || 0, sub: `${state.from} → ${state.to}` },
@@ -1168,9 +1188,9 @@ function renderKPI(s) {
     { label: "Reported", value: totalReportedApprox,
       sub: compPct !== null ? `${compPct}% selesai` : "—" },
     { label: "Late submission", value: totalLate, sub: "submit > 08:00" },
-    { label: "Aktivitas (report)", value: s.total_activity || 0,
+    { label: "Aktivitas (report)", value: (s.total_activity || 0) + (s.todo_items_matched || 0) + (s.todo_items_unmatched || 0),
       sub: matchPct !== null ? `${matchPct}% matched ke plan` : "—" },
-    { label: "Unmatched report", value: s.unmatched_activity || 0,
+    { label: "Unmatched report", value: (s.unmatched_activity || 0) + (s.todo_items_unmatched || 0),
       sub: "tidak match plan hari itu" },
   ];
 
