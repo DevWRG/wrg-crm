@@ -1071,53 +1071,17 @@ for D in "${DATES[@]}"; do
       fi
       HASHTAG_HITS=$((HASHTAG_HITS + 1))
 
-      # Auth — lookup master_user (via wa_number primarily, fallback sender_name).
-      # Use CASE for boolean → 't'/'f' karena PG concat "true"/"false" yang awkward.
-      USER_ROW=""
-      if [ "$SENDER_IS_GROUP" = "0" ]; then
-        USER_ROW=$($PSQL -c "
-          SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
-                 CASE WHEN aktif THEN 't' ELSE 'f' END
-          FROM master_user WHERE wa_number = '$WA_NUM';
-        " 2>/dev/null | head -1)
-      fi
-      if [ -z "$USER_ROW" ] && [ -n "$SENDER_NAME" ]; then
-        # Fallback: match nama/panggilan dgn 4 tier priority. WA pushname seringkali
-        # parsial (mis. "Denys Chandra" sementara DB "Denys Chandra Irawan").
-        SAFE_NAME=$(echo "$SENDER_NAME" | sed "s/'/''/g")
-        USER_ROW=$($PSQL -c "
-          SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
-                 CASE WHEN aktif THEN 't' ELSE 'f' END
-          FROM master_user
-          WHERE LOWER(nama) = LOWER('$SAFE_NAME')
-             OR LOWER(panggilan) = LOWER('$SAFE_NAME')
-             OR LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'
-             OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))
-          ORDER BY
-            CASE
-              WHEN LOWER(nama)      = LOWER('$SAFE_NAME')                          THEN 1
-              WHEN LOWER(panggilan) = LOWER('$SAFE_NAME')                          THEN 2
-              WHEN LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'                    THEN 3
-              WHEN LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))      THEN 4
-              ELSE 5
-            END,
-            LENGTH(nama)
-          LIMIT 1;
-        " 2>/dev/null | head -1)
-        if [ -n "$USER_ROW" ]; then
-          RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
-          $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
-          log "  matched via sender_name: '$SENDER_NAME' → id=$RESOLVED_ID"
-        fi
-      elif [ -n "$USER_ROW" ]; then
-        $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE wa_number = '$WA_NUM';" >/dev/null 2>>"$LOG_DIR/daily.log"
-      fi
-      # Tier 5: shared-HP fallback. Per brief, format "#PLAN <nama panggilan>" ke
-      # grup dengan HP yang dipakai bersama. Scoring-based match — prefer
-      # multi-token full-name substring of nama (most specific) over single-token
-      # panggilan match. Avoid mis-resolve "Najmi Putri Harini" → Putri Diana.
-      if [ -z "$USER_ROW" ]; then
-        BODY_QUERY=$(echo "$BODY" | python3 -c "
+      # Auth — explicit body-name attribution wins over sender. Tier order:
+      #   A. body-name override (score >= 70: panggilan/nama exact or multi-token)
+      #   B. sender phone (wa_number registered)
+      #   C. sender pushname (nama/panggilan match)
+      #   D. body-name fuzzy fallback (score >= 40, shared-HP heuristic)
+      # Rationale: "#PLAN Elok" sent from Husni's HP → row attributed to Elok.
+      # Garbage tokens like "Mei" (from "29 Mei 2026") score 0 → no match.
+
+      # Build body candidate row ONCE (reused for tier A high & tier D low).
+      BODY_BEST_ROW=""
+      BODY_QUERY=$(echo "$BODY" | python3 -c "
 import sys, re
 b = sys.stdin.read()
 m = re.match(r'^\s*#\s*\w+\s+(.{0,80})', b)
@@ -1155,22 +1119,83 @@ for t in toks:
     score -= 2
 print(' UNION ALL '.join(parts))
 " 2>/dev/null)
-        if [ -n "$BODY_QUERY" ]; then
-          BEST_ROW=$($PSQL -c "
-            SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
-                   CASE WHEN aktif THEN 't' ELSE 'f' END || E'\t' || matched
-            FROM ($BODY_QUERY) candidates
-            ORDER BY s DESC, LENGTH(nama) ASC
-            LIMIT 1;
-          " 2>/dev/null | head -1)
-          if [ -n "$BEST_ROW" ]; then
-            RESOLVED_ID=$(echo "$BEST_ROW" | cut -f1)
-            MATCHED=$(echo "$BEST_ROW" | cut -f4)
-            USER_ROW=$(echo "$BEST_ROW" | cut -f1-3)
-            $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
-            log "  matched via body shared-HP: '$MATCHED' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
-            BODY_NAME="$MATCHED"
-          fi
+      if [ -n "$BODY_QUERY" ]; then
+        BODY_BEST_ROW=$($PSQL -c "
+          SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
+                 CASE WHEN aktif THEN 't' ELSE 'f' END || E'\t' || matched || E'\t' || s
+          FROM ($BODY_QUERY) candidates
+          ORDER BY s DESC, LENGTH(nama) ASC
+          LIMIT 1;
+        " 2>/dev/null | head -1)
+      fi
+
+      USER_ROW=""
+
+      # Tier A: body-name override (score >= 70) — explicit attribution wins.
+      if [ -n "$BODY_BEST_ROW" ]; then
+        BODY_SCORE=$(echo "$BODY_BEST_ROW" | cut -f5)
+        if [ -n "$BODY_SCORE" ] && [ "$BODY_SCORE" -ge 70 ]; then
+          RESOLVED_ID=$(echo "$BODY_BEST_ROW" | cut -f1)
+          MATCHED=$(echo "$BODY_BEST_ROW" | cut -f4)
+          USER_ROW=$(echo "$BODY_BEST_ROW" | cut -f1-3)
+          $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+          log "  matched via body-name override: '$MATCHED' (score $BODY_SCORE) → id=$RESOLVED_ID (sender '$SENDER_NAME')"
+          BODY_NAME="$MATCHED"
+        fi
+      fi
+
+      # Tier B: sender phone (wa_number registered).
+      if [ -z "$USER_ROW" ] && [ "$SENDER_IS_GROUP" = "0" ]; then
+        USER_ROW=$($PSQL -c "
+          SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
+                 CASE WHEN aktif THEN 't' ELSE 'f' END
+          FROM master_user WHERE wa_number = '$WA_NUM';
+        " 2>/dev/null | head -1)
+        if [ -n "$USER_ROW" ]; then
+          $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE wa_number = '$WA_NUM';" >/dev/null 2>>"$LOG_DIR/daily.log"
+        fi
+      fi
+
+      # Tier C: sender pushname (nama/panggilan match, 4 sub-tiers).
+      if [ -z "$USER_ROW" ] && [ -n "$SENDER_NAME" ]; then
+        SAFE_NAME=$(echo "$SENDER_NAME" | sed "s/'/''/g")
+        USER_ROW=$($PSQL -c "
+          SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
+                 CASE WHEN aktif THEN 't' ELSE 'f' END
+          FROM master_user
+          WHERE LOWER(nama) = LOWER('$SAFE_NAME')
+             OR LOWER(panggilan) = LOWER('$SAFE_NAME')
+             OR LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'
+             OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))
+          ORDER BY
+            CASE
+              WHEN LOWER(nama)      = LOWER('$SAFE_NAME')                          THEN 1
+              WHEN LOWER(panggilan) = LOWER('$SAFE_NAME')                          THEN 2
+              WHEN LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'                    THEN 3
+              WHEN LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))      THEN 4
+              ELSE 5
+            END,
+            LENGTH(nama)
+          LIMIT 1;
+        " 2>/dev/null | head -1)
+        if [ -n "$USER_ROW" ]; then
+          RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
+          $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+          log "  matched via sender_name: '$SENDER_NAME' → id=$RESOLVED_ID"
+        fi
+      fi
+
+      # Tier D: body fuzzy fallback (score >= 40) — shared-HP heuristic when
+      # sender lookups all failed (e.g., generic group pushname like 'Admin Counter').
+      if [ -z "$USER_ROW" ] && [ -n "$BODY_BEST_ROW" ]; then
+        BODY_SCORE=$(echo "$BODY_BEST_ROW" | cut -f5)
+        if [ -n "$BODY_SCORE" ] && [ "$BODY_SCORE" -ge 40 ]; then
+          RESOLVED_ID=$(echo "$BODY_BEST_ROW" | cut -f1)
+          MATCHED=$(echo "$BODY_BEST_ROW" | cut -f4)
+          USER_ROW=$(echo "$BODY_BEST_ROW" | cut -f1-3)
+          $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+          log "  matched via body shared-HP: '$MATCHED' → id=$RESOLVED_ID (sender pushname '$SENDER_NAME')"
+          BODY_NAME="$MATCHED"
         fi
       fi
 
