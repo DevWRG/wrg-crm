@@ -55,7 +55,7 @@ if [ "$JOB" = "plan_check" ]; then
   ROWS=$($PSQL <<SQL
 SELECT
   mu.wa_number || '|' ||
-  COALESCE(mu.nama, '') || '|' ||
+  COALESCE(INITCAP(mu.panggilan), mu.nama, '') || '|' ||
   COALESCE(mu.last_active_group, '') || '|' ||
   COALESCE(mu.cabang, '')
 FROM master_user mu
@@ -119,6 +119,7 @@ WITH today_status AS (
     mu.id,
     mu.wa_number,
     mu.nama,
+    mu.panggilan,
     mu.last_active_group,
     COALESCE(sp.total_plan, 0)                          AS sp_total,
     COALESCE(sp.total_unreported, 0)                    AS sp_unreported,
@@ -151,7 +152,7 @@ WITH today_status AS (
 )
 SELECT
   wa_number || '|' ||
-  COALESCE(nama,'') || '|' ||
+  COALESCE(INITCAP(panggilan), nama, '') || '|' ||
   COALESCE(last_active_group,'') || '|' ||
   (sp_total + st_total) || '|' ||
   (sp_unreported + st_unreported) || '|' ||
