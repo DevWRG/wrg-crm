@@ -1026,6 +1026,16 @@ for D in "${DATES[@]}"; do
         fi
       fi
 
+      # Group deny-list (WRG_INBOUND_DENY_GROUPS, comma-separated). Skip messages
+      # from these JIDs even when allowlist is empty. Used on prod to keep the
+      # Research test group dev-only — prevents test #PLAN/#REPORT from
+      # contaminating wrg_crm_prod.
+      if [ -n "$WRG_INBOUND_DENY_GROUPS" ]; then
+        if echo ",$WRG_INBOUND_DENY_GROUPS," | grep -q ",$GROUP_JID,"; then
+          continue
+        fi
+      fi
+
       # Normalize sender: strip @s.whatsapp.net / @g.us / @lid etc
       WA_NUM=$(echo "$SENDER" | sed -E 's/@.*$//' | sed -E 's/[^0-9]//g')
       [ -z "$WA_NUM" ] && continue

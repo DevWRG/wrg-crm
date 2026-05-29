@@ -40,9 +40,16 @@ PSQL_FMT="psql -U $PGUSER -d $PGDATABASE"
 RESEARCH_GROUP_JID="120363409252019573@g.us"
 if [ "$WRG_ENV" = "prod" ]; then
   WRG_INBOUND_ALLOWED_GROUPS="${WRG_INBOUND_ALLOWED_GROUPS:-}"   # empty = all groups
+  # Research = dev-only zone. Prevents test #PLAN/#REPORT messages from
+  # leaking into wrg_crm_prod when dev inbound (worktree ~/wrg-crm-dev/) is
+  # also running on cron. Both prod & dev see the same JSONL; this carves
+  # responsibility cleanly.
+  WRG_INBOUND_DENY_GROUPS="${WRG_INBOUND_DENY_GROUPS:-$RESEARCH_GROUP_JID}"
 else
   WRG_INBOUND_ALLOWED_GROUPS="${WRG_INBOUND_ALLOWED_GROUPS:-$RESEARCH_GROUP_JID}"
+  WRG_INBOUND_DENY_GROUPS="${WRG_INBOUND_DENY_GROUPS:-}"
 fi
+export WRG_INBOUND_ALLOWED_GROUPS WRG_INBOUND_DENY_GROUPS
 
 # ── AI: direct OpenRouter API ────────────────────────────────
 # Sama pattern dengan WRG Monitor karena openclaw agent --model
