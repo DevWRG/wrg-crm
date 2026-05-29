@@ -196,6 +196,8 @@ per_orang AS (
     COALESCE(st.total_todo_items, 0)       AS total_todo_items,
     COALESCE(st.todo_reported, 0)          AS todo_reported,
     COALESCE(st.todo_late, 0)              AS todo_late,
+    COALESCE(st.todo_items_matched, 0)     AS todo_items_matched,
+    COALESCE(st.todo_items_unmatched, 0)   AS todo_items_unmatched,
     COALESCE(act.total_activity, 0)        AS total_activity,
     COALESCE(act.matched_activity, 0)      AS matched_activity,
     COALESCE(act.unmatched_activity, 0)    AS unmatched_activity,
@@ -216,7 +218,17 @@ per_orang AS (
       COUNT(*)                              AS total_todos,
       COALESCE(SUM(total_items), 0)         AS total_todo_items,
       COUNT(*) FILTER (WHERE reported)      AS todo_reported,
-      COUNT(*) FILTER (WHERE is_late_plan)  AS todo_late
+      COUNT(*) FILTER (WHERE is_late_plan)  AS todo_late,
+      -- Aggregate from report_data jsonb: status 'matched' = report item linked to plan,
+      -- 'ambiguous' + 'unmatched' = item user reported that didn't link to plan.
+      COALESCE(SUM(
+        (SELECT COUNT(*) FROM jsonb_array_elements(COALESCE(report_data, '[]'::jsonb)) AS r
+         WHERE r->>'status' = 'matched')
+      ), 0)                                  AS todo_items_matched,
+      COALESCE(SUM(
+        (SELECT COUNT(*) FROM jsonb_array_elements(COALESCE(report_data, '[]'::jsonb)) AS r
+         WHERE r->>'status' IN ('ambiguous','unmatched'))
+      ), 0)                                  AS todo_items_unmatched
     FROM sales_todo, params
     WHERE user_id = mu.id AND tanggal BETWEEN params.d1 AND params.d2
   ) st ON TRUE
@@ -260,6 +272,8 @@ SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role), '[]'::json) FROM (
     SUM(total_plan_visits + total_todo_items)             AS total_plan,
     SUM(plan_reported)                                    AS plan_reported,
     SUM(todo_reported)                                    AS todo_reported,
+    SUM(todo_items_matched)                               AS todo_items_matched,
+    SUM(todo_items_unmatched)                             AS todo_items_unmatched,
     SUM(total_activity)                                   AS total_activity,
     SUM(matched_activity)                                 AS matched_activity,
     SUM(unmatched_activity)                               AS unmatched_activity,
@@ -280,6 +294,8 @@ SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.cabang), '[]'::json) FROM (
     SUM(total_plan_visits + total_todo_items)             AS total_plan,
     SUM(plan_reported)                                    AS plan_reported,
     SUM(todo_reported)                                    AS todo_reported,
+    SUM(todo_items_matched)                               AS todo_items_matched,
+    SUM(todo_items_unmatched)                             AS todo_items_unmatched,
     SUM(total_activity)                                   AS total_activity,
     SUM(matched_activity)                                 AS matched_activity,
     SUM(unmatched_activity)                               AS unmatched_activity,
@@ -1106,26 +1122,27 @@ function pct(num, denom) {
 function enrichOrang(r) {
   r.is_am   = r.role === "AM";
   r.plan_count   = r.is_am ? r.total_plan_visits : r.total_todo_items;
-  r.report_count = r.is_am ? r.plan_reported     : r.todo_reported;
-  // For non-AM, "reported" = items in reported todos (approximation: assume all items in reported todo are done)
-  if (!r.is_am) {
-    const ratio_done = r.total_todos > 0 ? (r.todo_reported / r.total_todos) : 0;
-    r.report_count = Math.round(r.total_todo_items * ratio_done);
-  }
+  // For TODO mode (non-AM), use actual matched item count from report_data jsonb
+  // instead of (todo_reported/total_todos) ratio approximation.
+  r.report_count = r.is_am ? r.plan_reported : r.todo_items_matched;
   r.late      = r.plan_late + r.todo_late;
-  r.unmatched = r.unmatched_activity;
+  // Unmatched: AM from activity_log.is_unmatched; TODO from report_data status != 'matched'.
+  r.unmatched = r.is_am ? r.unmatched_activity : r.todo_items_unmatched;
   r.completion = pct(r.report_count, r.plan_count);
   return r;
 }
 
 function enrichDivisi(r) {
-  r.reported = (r.plan_reported || 0) + (r.todo_reported || 0);
+  // Reported items = AM plan_reported (AM mode visits reported) + actual matched TODO items
+  r.reported = (r.plan_reported || 0) + (r.todo_items_matched || 0);
+  r.unmatched_activity = (r.unmatched_activity || 0) + (r.todo_items_unmatched || 0);
   r.completion = pct(r.reported, r.total_plan);
   return r;
 }
 
 function enrichCabang(r) {
-  r.reported = (r.plan_reported || 0) + (r.todo_reported || 0);
+  // Same as divisi: report count = actual matched (AM plan_reported + TODO matched items)
+  r.reported = (r.plan_reported || 0) + (r.todo_items_matched || 0);
   r.completion = pct(r.reported, r.total_plan);
   return r;
 }
