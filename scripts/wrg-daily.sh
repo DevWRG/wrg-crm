@@ -61,6 +61,7 @@ SELECT
 FROM master_user mu
 WHERE mu.aktif = TRUE
   AND COALESCE(mu.wajib_plan_report, TRUE) = TRUE
+  AND NOT is_on_leave(mu.id, CURRENT_DATE)
   AND NOT EXISTS (
     SELECT 1 FROM sales_plan sp
     WHERE sp.user_id = mu.id
@@ -145,6 +146,7 @@ WITH today_status AS (
   ) st ON TRUE
   WHERE mu.aktif = TRUE
     AND COALESCE(mu.wajib_plan_report, TRUE) = TRUE
+    AND NOT is_on_leave(mu.id, CURRENT_DATE)
     ${WEEKEND_FILTER}
 )
 SELECT
@@ -280,12 +282,14 @@ SQL
     exit 0
   fi
 
-  # Total wajib & non-reporters — biar AI gak hallucinate count + nama
-  N_WAJIB=$($PSQL -c "SELECT COUNT(*) FROM master_user WHERE aktif AND wajib_plan_report;" 2>/dev/null | head -1 | tr -d ' ')
+  # Total wajib & non-reporters — biar AI gak hallucinate count + nama.
+  # N_WAJIB exclude yang on-leave hari ini supaya denominator akurat.
+  N_WAJIB=$($PSQL -c "SELECT COUNT(*) FROM master_user WHERE aktif AND wajib_plan_report AND NOT is_on_leave(id, CURRENT_DATE);" 2>/dev/null | head -1)
   NO_PLAN_LIST=$($PSQL <<SQL
 SELECT COALESCE(nama, panggilan, wa_number)
 FROM master_user mu
 WHERE aktif AND wajib_plan_report
+  AND NOT is_on_leave(mu.id, CURRENT_DATE)
   AND NOT EXISTS (SELECT 1 FROM sales_plan WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
   AND NOT EXISTS (SELECT 1 FROM sales_todo WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
 ORDER BY nama;
@@ -295,6 +299,7 @@ SQL
 SELECT COALESCE(nama, panggilan, wa_number)
 FROM master_user mu
 WHERE aktif AND wajib_plan_report
+  AND NOT is_on_leave(mu.id, CURRENT_DATE)
   -- punya plan/todo hari ini
   AND (EXISTS (SELECT 1 FROM sales_plan WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
        OR EXISTS (SELECT 1 FROM sales_todo WHERE user_id=mu.id AND tanggal=CURRENT_DATE))
@@ -302,6 +307,14 @@ WHERE aktif AND wajib_plan_report
   AND NOT EXISTS (SELECT 1 FROM activity_log WHERE user_id=mu.id AND tanggal=CURRENT_DATE)
   AND NOT EXISTS (SELECT 1 FROM sales_todo WHERE user_id=mu.id AND tanggal=CURRENT_DATE AND reported)
 ORDER BY nama;
+SQL
+)
+  ON_LEAVE_LIST=$($PSQL <<SQL
+SELECT COALESCE(mu.nama, mu.panggilan, mu.wa_number) || ' (' || ul.jenis || ')'
+FROM v_leave_today ul
+JOIN master_user mu ON mu.id = ul.user_id
+WHERE mu.aktif AND mu.wajib_plan_report
+ORDER BY mu.nama;
 SQL
 )
 
@@ -315,7 +328,9 @@ CRITICAL RULES:
 - JANGAN mengarang nama, angka, atau fakta yg tidak ada di data input.
 - Section 'Perhatian' HANYA pakai nama dari list 'NON_REPORTERS' & 'NO_PLAN' yg di-input.
   Kalau list kosong, tulis '(semua wajib user sudah submit)'.
+- Section 'Ijin' HANYA pakai nama dari list 'ON_LEAVE'. Skip section ini kalau list kosong.
 - Angka 'anggota aktif dari N tim' pakai N=anggota_aktif/wajib_total dari STATS.
+  wajib_total sudah exclude yg ijin hari ini.
 - Per Area hanya sebut cabang yg muncul di DATA INPUT.
 
 FORMAT OUTPUT WAJIB (plain text, JANGAN pakai markdown header ##):
@@ -335,13 +350,18 @@ FORMAT OUTPUT WAJIB (plain text, JANGAN pakai markdown header ##):
 *Perhatian*
 [copy nama dari NON_REPORTERS & NO_PLAN list, jangan ngarang]
 
+*Ijin*
+[copy nama dari ON_LEAVE list. Skip section kalau kosong]
+
 Gunakan Bahasa Indonesia. Singkat, informatif, eksekutif. Maksimal 30 baris."
 
   # Encode lists untuk AI input
   NO_PLAN_CSV=$(echo "$NO_PLAN_LIST" | grep -v '^$' | paste -sd ", " - 2>/dev/null || echo "(kosong)")
   NO_REPORT_CSV=$(echo "$NO_REPORT_LIST" | grep -v '^$' | paste -sd ", " - 2>/dev/null || echo "(kosong)")
+  ON_LEAVE_CSV=$(echo "$ON_LEAVE_LIST" | grep -v '^$' | paste -sd ", " - 2>/dev/null || echo "(kosong)")
   [ -z "$NO_PLAN_CSV" ] && NO_PLAN_CSV="(kosong)"
   [ -z "$NO_REPORT_CSV" ] && NO_REPORT_CSV="(kosong)"
+  [ -z "$ON_LEAVE_CSV" ] && ON_LEAVE_CSV="(kosong)"
 
   USR_MSG="DATA INPUT (CSV pipe-delimited: nama|cabang|role|customer|hasil|next_action|matched/unmatched|plan_tujuan|plan_goal):
 
@@ -354,7 +374,10 @@ NO_PLAN (wajib tapi tidak submit plan hari ini):
 ${NO_PLAN_CSV}
 
 NON_REPORTERS (sudah submit plan tapi belum report):
-${NO_REPORT_CSV}"
+${NO_REPORT_CSV}
+
+ON_LEAVE (wajib tapi ijin/sakit/cuti hari ini — sudah di-exclude dari wajib_total):
+${ON_LEAVE_CSV}"
 
   log "daily_summary — calling AI: rows=$ROW_COUNT anggota=$N_ANGGOTA"
   SUMMARY=$(call_ai_with_fallback "$SYS_PROMPT" "$USR_MSG" 4000)

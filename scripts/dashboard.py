@@ -199,7 +199,9 @@ per_orang AS (
     COALESCE(act.total_activity, 0)        AS total_activity,
     COALESCE(act.matched_activity, 0)      AS matched_activity,
     COALESCE(act.unmatched_activity, 0)    AS unmatched_activity,
-    COALESCE(d.active_days, 0)             AS active_days
+    COALESCE(d.active_days, 0)             AS active_days,
+    is_on_leave(mu.id, CURRENT_DATE)       AS on_leave_today,
+    (SELECT jenis FROM v_leave_today WHERE user_id = mu.id LIMIT 1) AS leave_jenis_today
   FROM master_user mu
   LEFT JOIN LATERAL (
     SELECT
@@ -690,6 +692,7 @@ td.pct { text-align: right; font-variant-numeric: tabular-nums; }
 .tag.role-Admin    { background: #c7d2fe; color: #3730a3; }
 .tag.warn          { background: #fde68a; color: #78350f; }
 .tag.late          { background: #fecaca; color: #991b1b; }
+.tag.leave         { background: #ddd6fe; color: #5b21b6; }
 .tag.ok            { background: #bbf7d0; color: #14532d; }
 
 #search-input {
@@ -1422,8 +1425,11 @@ function rowOrang(r) {
   const roleTag = `<span class="tag role-${escapeHtml(r.role)}">${escapeHtml(r.role)}</span>`;
   const lateTag = r.late > 0 ? `<span class="tag late">${r.late}</span>` : `<span style="color:#94a3b8">0</span>`;
   const unmTag  = r.unmatched > 0 ? `<span class="tag warn">${r.unmatched}</span>` : `<span style="color:#94a3b8">0</span>`;
+  const leaveTag = r.on_leave_today
+    ? ` <span class="tag leave" title="ijin hari ini">ijin ${escapeHtml(r.leave_jenis_today || "")}</span>`
+    : "";
   return `<tr class="row-clickable" data-user-id="${r.user_id}">
-    <td><b>${escapeHtml(r.panggilan || "")}</b></td>
+    <td><b>${escapeHtml(r.panggilan || "")}</b>${leaveTag}</td>
     <td>${escapeHtml(r.nama || "")}</td>
     <td>${roleTag}<div style="font-size:11px;color:#94a3b8">${escapeHtml(r.posisi || "")}</div></td>
     <td>${escapeHtml(r.cabang || "")}</td>
