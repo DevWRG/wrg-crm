@@ -646,6 +646,12 @@ for raw in lines:
         # Numbered customer header — start new entry
         flush()
         current = {"cust": strip_num(line), "hasil": "", "next": ""}
+    else:
+        # Plain text line (no prefix). If current entry exists tapi hasil
+        # masih kosong, treat baris ini sebagai hasil (user lupa typing
+        # 'hasil:' prefix). Else ignore.
+        if current and not current.get("hasil"):
+            current["hasil"] = line.strip()
 
 flush()
 print(json.dumps(out, ensure_ascii=False))
