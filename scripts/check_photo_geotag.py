@@ -88,15 +88,32 @@ def main():
 
         result["raw_ocr"] = text
 
-        # Coords: "Lat -7.282302 Long 112.754749"
-        m = re.search(r'Lat\s*(-?\d+\.\d+)\s*Long\s*(-?\d+\.\d+)', text, re.I)
+        # Coords — try multiple watermark formats:
+        # A) "Lat -7.282302 Long 112.754749"  (Geo-Tagging Camera)
+        # B) "© -7,2822° 112,7548°"            (alt camera, comma decimal + °)
+        # C) "-7.2822, 112.7548"               (plain coord pair)
+        m = re.search(r'Lat\s*(-?\d+[.,]\d+)\s*Long\s*(-?\d+[.,]\d+)', text, re.I)
+        if not m:
+            m = re.search(r'(-?\d+[.,]\d{3,})\s*°\s*(-?\d+[.,]\d{3,})\s*°', text)
+        if not m:
+            # Pair like "-7.282302, 112.754749" (no degree symbol)
+            m = re.search(r'(-?\d+[.,]\d{4,})[\s,]+(-?\d+[.,]\d{4,})', text)
         if m:
-            result["has_geotag"] = True
-            result["lat"] = float(m.group(1))
-            result["lon"] = float(m.group(2))
+            try:
+                lat = float(m.group(1).replace(',', '.'))
+                lon = float(m.group(2).replace(',', '.'))
+                # Sanity check: Indonesia bounds (-11 to 6 lat, 95 to 141 lng)
+                if -11 <= lat <= 6 and 95 <= lon <= 141:
+                    result["has_geotag"] = True
+                    result["lat"] = lat
+                    result["lon"] = lon
+            except ValueError:
+                pass
 
-        # Timestamp: "2026/05/30 21:46"
+        # Timestamp: "2026/05/30 21:46" or "31/05/2026, 00:44"
         mt = re.search(r'(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2})', text)
+        if not mt:
+            mt = re.search(r'(\d{2}/\d{2}/\d{4},?\s+\d{2}:\d{2})', text)
         if mt:
             result["timestamp"] = mt.group(1)
 
