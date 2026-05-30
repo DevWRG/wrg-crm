@@ -87,6 +87,36 @@ def psql_json(sql: str, env: str | None = None):
         raise RuntimeError(f"psql output not JSON: {out[:200]!r} ({e})")
 
 
+def psql_exec(sql: str, env: str | None = None):
+    """Run INSERT/UPDATE/DELETE. With RETURNING (SELECT row_to_json(t)...) clause,
+    returns the parsed JSON row. Strips trailing 'INSERT/UPDATE/DELETE N' status."""
+    db = db_name(env)
+    proc = subprocess.run(
+        [PSQL_BIN, "-U", PG_USER, "-d", db, "-tA", "-c", sql],
+        capture_output=True, text=True, timeout=30,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"psql exec failed (db={db}): {proc.stderr.strip()[:500]}")
+    out = proc.stdout.strip()
+    if not out:
+        return None
+    # First line is usually the RETURNING result; subsequent lines are status.
+    first_line = out.split("\n", 1)[0]
+    try:
+        return json.loads(first_line)
+    except json.JSONDecodeError:
+        return first_line  # Plain text fallback
+
+
+def psql_quote(s) -> str:
+    """SQL-escape a string by doubling single quotes. Numeric passed-through."""
+    if s is None:
+        return "NULL"
+    if isinstance(s, (int, float)):
+        return str(s)
+    return "'" + str(s).replace("'", "''") + "'"
+
+
 def valid_date(s: str) -> bool:
     return bool(s and DATE_RE.match(s))
 
@@ -637,6 +667,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = psql_json(SQL_DRILLDOWN_USER.format(user_id=int(uid), d1=d1, d2=d2), env=env)
                 return json_response(self, {"from": d1, "to": d2, "env": env, "detail": data or {}})
 
+            # Admin: list master_user (read-only for now, edit via SQL).
+            if path == "/api/users":
+                env2 = parse_env(qs)
+                data = psql_json("""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role, t.panggilan), '[]'::json)
+                    FROM (
+                      SELECT id, nama, panggilan, role, posisi, cabang, wa_number,
+                             aktif, wajib_plan_report, last_active_at
+                      FROM master_user
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "rows": data or []})
+
+            # Admin: list user_leave with user info joined.
+            if path == "/api/leave":
+                env2 = parse_env(qs)
+                data = psql_json("""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.start_date DESC, t.id DESC), '[]'::json)
+                    FROM (
+                      SELECT ul.id, ul.user_id, mu.nama, mu.panggilan, mu.role,
+                             ul.start_date::text AS start_date,
+                             ul.end_date::text AS end_date,
+                             ul.jenis, ul.keterangan,
+                             ul.created_at::text AS created_at
+                      FROM user_leave ul
+                      JOIN master_user mu ON mu.id = ul.user_id
+                      ORDER BY ul.start_date DESC, ul.id DESC
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "rows": data or []})
+
+            # Admin: list master_holiday.
+            if path == "/api/holidays":
+                env2 = parse_env(qs)
+                data = psql_json("""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.tanggal), '[]'::json)
+                    FROM (
+                      SELECT id, tanggal::text AS tanggal, keterangan
+                      FROM master_holiday
+                      ORDER BY tanggal
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "rows": data or []})
+
             # Static fallback: any path that maps to a real file in
             # FRONTEND_DIST. Path traversal guarded by resolving + checking
             # parent. Allows Adminator to serve /assets/..., /*.html, etc.
@@ -651,6 +725,88 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return
 
             return text_response(self, "not found", status=404)
+
+        except RuntimeError as e:
+            return json_response(self, {"error": str(e)}, 500)
+        except Exception as e:
+            return json_response(self, {"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def _read_json_body(self):
+        """Parse JSON body from POST/PUT. Returns dict or None on failure."""
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+            if n <= 0 or n > 100_000:
+                return None
+            raw = self.rfile.read(n)
+            return json.loads(raw.decode("utf-8"))
+        except Exception:
+            return None
+
+    def do_POST(self):  # noqa: N802
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        path = parsed.path
+        env = parse_env(qs)
+        body = self._read_json_body()
+
+        try:
+            if path == "/api/leave" and body:
+                user_id = body.get("user_id")
+                start = body.get("start_date") or ""
+                end = body.get("end_date") or start
+                jenis = body.get("jenis") or ""
+                ket = body.get("keterangan") or ""
+                if not (isinstance(user_id, int) and valid_date(start) and valid_date(end) and jenis in ("sakit", "cuti", "ijin")):
+                    return json_response(self, {"error": "missing/invalid fields"}, 400)
+                sql = f"""
+                INSERT INTO user_leave (user_id, start_date, end_date, jenis, keterangan)
+                VALUES ({user_id}, {psql_quote(start)}, {psql_quote(end)}, {psql_quote(jenis)}, {psql_quote(ket)})
+                RETURNING (SELECT row_to_json(t) FROM (SELECT id, user_id, start_date::text AS start_date, end_date::text AS end_date, jenis, keterangan) t);
+                """
+                row = psql_exec(sql, env=env)
+                return json_response(self, {"created": row}, 201)
+
+            if path == "/api/holidays" and body:
+                tgl = body.get("tanggal") or ""
+                ket = body.get("keterangan") or ""
+                if not (valid_date(tgl) and ket):
+                    return json_response(self, {"error": "missing/invalid fields"}, 400)
+                sql = f"""
+                INSERT INTO master_holiday (tanggal, keterangan)
+                VALUES ({psql_quote(tgl)}, {psql_quote(ket)})
+                ON CONFLICT (tanggal) DO UPDATE SET keterangan = EXCLUDED.keterangan
+                RETURNING (SELECT row_to_json(t) FROM (SELECT id, tanggal::text AS tanggal, keterangan) t);
+                """
+                row = psql_exec(sql, env=env)
+                return json_response(self, {"upserted": row}, 201)
+
+            return json_response(self, {"error": "endpoint not supported via POST"}, 404)
+
+        except RuntimeError as e:
+            return json_response(self, {"error": str(e)}, 500)
+        except Exception as e:
+            return json_response(self, {"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def do_DELETE(self):  # noqa: N802
+        parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
+        path = parsed.path
+        env = parse_env(qs)
+
+        # Path pattern: /api/leave/<id>  or  /api/holidays/<id>
+        try:
+            for prefix, table in (("/api/leave/", "user_leave"), ("/api/holidays/", "master_holiday")):
+                if path.startswith(prefix):
+                    id_str = path[len(prefix):]
+                    if not id_str.isdigit():
+                        return json_response(self, {"error": "invalid id"}, 400)
+                    sql = f"DELETE FROM {table} WHERE id = {int(id_str)} RETURNING (SELECT row_to_json(t) FROM (SELECT {int(id_str)} AS id, 'deleted' AS status) t);"
+                    row = psql_exec(sql, env=env)
+                    if row is None:
+                        return json_response(self, {"error": "not found"}, 404)
+                    return json_response(self, {"deleted": row})
+
+            return json_response(self, {"error": "endpoint not supported via DELETE"}, 404)
 
         except RuntimeError as e:
             return json_response(self, {"error": str(e)}, 500)

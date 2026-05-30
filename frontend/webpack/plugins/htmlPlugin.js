@@ -4,7 +4,11 @@ const
   HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const titles = {
-  'index': 'Adminator · Dashboard',
+  'index': 'WRG CRM · Dashboard',
+  'leave': 'WRG CRM · Manage Leave',
+  'holidays': 'WRG CRM · Manage Holidays',
+  'users': 'WRG CRM · Manage Users',
+  // Adminator demo pages (kept for now as reference, may be removed later)
   'email': 'Adminator · Email',
   'calendar': 'Adminator · Calendar',
   'chat': 'Adminator · Chat',
