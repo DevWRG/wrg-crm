@@ -39,11 +39,11 @@ from wrg_queries import (
 
 
 def default_range() -> tuple[str, str]:
-    """Senin–Sabtu minggu berjalan (atau hari ini kalau pertengahan minggu)."""
+    """Senin–Minggu minggu berjalan (atau hari ini kalau pertengahan minggu)."""
     today = datetime.date.today()
     monday = today - datetime.timedelta(days=today.weekday())
-    saturday = monday + datetime.timedelta(days=5)
-    end = min(saturday, today)
+    sunday = monday + datetime.timedelta(days=6)
+    end = min(sunday, today)
     return monday.isoformat(), end.isoformat()
 
 
