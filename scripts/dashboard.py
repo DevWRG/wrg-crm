@@ -87,6 +87,88 @@ def psql_json(sql: str, env: str | None = None):
         raise RuntimeError(f"psql output not JSON: {out[:200]!r} ({e})")
 
 
+# ── Auth helpers ────────────────────────────────────────────────────────
+import hashlib as _hashlib
+import secrets as _secrets
+
+PBKDF2_ITER = 200_000
+
+
+def hash_password(plain: str) -> str:
+    """pbkdf2_sha256$<iter>$<salt_hex>$<hash_hex>"""
+    salt = _secrets.token_bytes(16)
+    h = _hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, PBKDF2_ITER, 32)
+    return f"pbkdf2_sha256${PBKDF2_ITER}${salt.hex()}${h.hex()}"
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        algo, iters, salt_hex, h_hex = hashed.split("$", 3)
+        if algo != "pbkdf2_sha256":
+            return False
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(h_hex)
+        h = _hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt, int(iters), len(expected))
+        return _secrets.compare_digest(h, expected)
+    except Exception:
+        return False
+
+
+def create_session(user_id: int, env: str, ua: str = "", ip: str = "") -> str:
+    """Insert wrg_user_session row, return token (expires in 24h)."""
+    token = _secrets.token_urlsafe(32)
+    sql = (
+        "INSERT INTO wrg_user_session (token, user_id, expires_at, user_agent, ip) VALUES ("
+        f"{psql_quote(token)}, {int(user_id)}, NOW() + INTERVAL '24 hours', "
+        f"{psql_quote(ua[:200])}, {psql_quote(ip[:64])});"
+    )
+    psql_exec(sql, env=env)
+    psql_exec(f"UPDATE master_user SET last_login_at = NOW() WHERE id = {int(user_id)};", env=env)
+    return token
+
+
+def validate_session(token: str, env: str):
+    """Return user row dict if valid + not expired, else None."""
+    if not token or len(token) < 20:
+        return None
+    safe = psql_quote(token)
+    sql = (
+        "SELECT row_to_json(t) FROM ("
+        "  SELECT mu.id, mu.nama, mu.panggilan, mu.role, mu.posisi, mu.cabang, "
+        "         mu.wa_number, mu.aktif, mu.wajib_plan_report, mu.force_password_change "
+        "  FROM wrg_user_session s "
+        "  JOIN master_user mu ON mu.id = s.user_id "
+        f"  WHERE s.token = {safe} AND s.expires_at > NOW() "
+        "  LIMIT 1"
+        ") t;"
+    )
+    return psql_json(sql, env=env)
+
+
+def destroy_session(token: str, env: str):
+    if not token:
+        return
+    psql_exec(f"DELETE FROM wrg_user_session WHERE token = {psql_quote(token)};", env=env)
+
+
+def is_admin_role(role: str) -> bool:
+    """HOD + Direksi treated as admin (full access). Others = regular user."""
+    return role in ("HOD", "Direksi")
+
+
+def get_cookie(handler, name: str) -> str:
+    """Parse single cookie value from headers."""
+    raw = handler.headers.get("Cookie", "")
+    for part in raw.split(";"):
+        part = part.strip()
+        if part.startswith(name + "="):
+            return part[len(name) + 1:]
+    return ""
+
+
+SESSION_COOKIE = "wrg_session"
+
+
 def psql_exec(sql: str, env: str | None = None):
     """Run INSERT/UPDATE/DELETE. With RETURNING (SELECT row_to_json(t)...) clause,
     returns the parsed JSON row. Strips trailing 'INSERT/UPDATE/DELETE N' status."""
@@ -609,8 +691,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
 
         try:
+            env_qs = parse_env(qs)
+
+            # /api/auth/me — public (returns 401 if no session).
+            if path == "/api/auth/me":
+                user = self._current_user(env_qs)
+                if not user:
+                    return json_response(self, {"error": "not authenticated"}, 401)
+                user["is_admin"] = is_admin_role(user.get("role", ""))
+                return json_response(self, {"user": user})
+
+            # Auth guard for /api/* — except auth endpoints.
+            if path.startswith("/api/") and not path.startswith("/api/auth/"):
+                user = self._current_user(env_qs)
+                if not user:
+                    return json_response(self, {"error": "unauthorized"}, 401)
+                self._user = user  # attach for downstream role checks
+                # Admin-only endpoints (mutation done via POST/DELETE elsewhere,
+                # but list endpoints also need protection).
+                if path in ("/api/users", "/api/leave", "/api/holidays") and not is_admin_role(user["role"]):
+                    return json_response(self, {"error": "forbidden — admin only"}, 403)
+                # Regular user can only drilldown self.
+                if path == "/api/drilldown" and not is_admin_role(user["role"]):
+                    uid = (qs.get("user_id") or [""])[0]
+                    if not uid.isdigit() or int(uid) != user["id"]:
+                        return json_response(self, {"error": "forbidden — own data only"}, 403)
+
             # Default route: serve Adminator's index.html if dist/ exists,
-            # else fall back to legacy inline HTML.
+            # else fall back to legacy inline HTML. (Static HTML always public;
+            # JS-side checks /api/auth/me and redirects to /login.html if 401.)
             if path == "/" or path == "/index.html":
                 idx = FRONTEND_DIST / "index.html"
                 if idx.is_file():
@@ -731,6 +840,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             return json_response(self, {"error": f"{type(e).__name__}: {e}"}, 500)
 
+    def _current_user(self, env: str):
+        """Return user dict from session cookie, or None if not authenticated."""
+        tok = get_cookie(self, SESSION_COOKIE)
+        return validate_session(tok, env) if tok else None
+
     def _read_json_body(self):
         """Parse JSON body from POST/PUT. Returns dict or None on failure."""
         try:
@@ -750,6 +864,68 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = self._read_json_body()
 
         try:
+            # Auth: login (no auth required). Lookup by panggilan OR nama OR wa_number.
+            if path == "/api/auth/login" and body:
+                ident = (body.get("identifier") or "").strip()
+                pw = body.get("password") or ""
+                if not ident or not pw:
+                    return json_response(self, {"error": "identifier + password required"}, 400)
+                safe = psql_quote(ident.lower())
+                row = psql_json(
+                    "SELECT row_to_json(t) FROM ("
+                    "  SELECT id, nama, panggilan, role, password_hash, aktif, force_password_change "
+                    "  FROM master_user "
+                    f"  WHERE aktif AND ("
+                    f"    LOWER(panggilan) = {safe} OR LOWER(nama) = {safe} OR wa_number = {psql_quote(ident)}"
+                    "  ) LIMIT 1"
+                    ") t;",
+                    env=env,
+                )
+                if not row or not row.get("password_hash"):
+                    return json_response(self, {"error": "akun tidak ditemukan atau belum di-setup"}, 401)
+                if not verify_password(pw, row["password_hash"]):
+                    return json_response(self, {"error": "password salah"}, 401)
+
+                ua = self.headers.get("User-Agent", "")
+                ip = self.client_address[0] if self.client_address else ""
+                token = create_session(row["id"], env, ua, ip)
+
+                # Set httponly cookie
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Set-Cookie", f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax")
+                self.send_header("Cache-Control", "no-store")
+                resp = json.dumps({
+                    "user": {
+                        "id": row["id"], "nama": row["nama"], "panggilan": row["panggilan"],
+                        "role": row["role"], "is_admin": is_admin_role(row["role"]),
+                        "force_password_change": row.get("force_password_change") or False,
+                    },
+                }).encode("utf-8")
+                self.send_header("Content-Length", str(len(resp)))
+                self.end_headers()
+                self.wfile.write(resp)
+                return
+
+            # Auth: logout
+            if path == "/api/auth/logout":
+                tok = get_cookie(self, SESSION_COOKIE)
+                destroy_session(tok, env)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax")
+                self.send_header("Content-Length", "16")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}     ')
+                return
+
+            # All other POST routes require auth.
+            user = self._current_user(env)
+            if not user:
+                return json_response(self, {"error": "unauthorized"}, 401)
+            if not is_admin_role(user["role"]):
+                return json_response(self, {"error": "forbidden — admin only"}, 403)
+
             if path == "/api/leave" and body:
                 user_id = body.get("user_id")
                 start = body.get("start_date") or ""
@@ -795,6 +971,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         # Path pattern: /api/leave/<id>  or  /api/holidays/<id>
         try:
+            # Auth check — admin only for delete operations
+            user = self._current_user(env)
+            if not user:
+                return json_response(self, {"error": "unauthorized"}, 401)
+            if not is_admin_role(user["role"]):
+                return json_response(self, {"error": "forbidden — admin only"}, 403)
+
             for prefix, table in (("/api/leave/", "user_leave"), ("/api/holidays/", "master_holiday")):
                 if path.startswith(prefix):
                     id_str = path[len(prefix):]
