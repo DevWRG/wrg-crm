@@ -360,6 +360,7 @@ plan_rows AS (
       sp.reported, sp.reported_at,
       sp.is_late_plan, sp.submitted_at,
       sp.activity_id,
+      sp.visit_lat, sp.visit_lon, sp.visit_timestamp, sp.visit_date_mismatch,
       al.hasil, al.next_action, al.match_score
     FROM sales_plan sp
     CROSS JOIN params

@@ -391,8 +391,15 @@
                       <th style="padding:6px 8px; text-align:left;">Goal</th>
                       <th style="padding:6px 8px; text-align:center;">Status</th>
                       <th style="padding:6px 8px; text-align:left;">Hasil</th>
+                      <th style="padding:6px 8px; text-align:left;">Visit Geotag</th>
                     </tr></thead><tbody>
-                    ${planRows.map((p) => `
+                    ${planRows.map((p) => {
+                      const visitCell = p.visit_lat && p.visit_lon
+                        ? `<a href="https://www.google.com/maps?q=${p.visit_lat},${p.visit_lon}" target="_blank" style="text-decoration:none;">📍 ${p.visit_lat}, ${p.visit_lon}</a>`
+                          + (p.visit_timestamp ? `<div style="font-size:10px; color:#94a3b8;">${escapeHtml(p.visit_timestamp.replace('T',' ').slice(0,16))}</div>` : '')
+                          + (p.visit_date_mismatch ? `<div style="margin-top:2px;">${badge('⚠️ tanggal mismatch', '#dc2626')}</div>` : '')
+                        : (p.reported ? `<span style="color:#dc2626; font-size:11px;">⚠️ no geotag</span>` : '<span style="color:#94a3b8;">—</span>');
+                      return `
                       <tr style="border-top:1px solid #f1f5f9;">
                         <td style="padding:6px 8px; white-space:nowrap;">${fmtDate(p.tanggal)}</td>
                         <td style="padding:6px 8px;"><strong>${escapeHtml(p.customer_name)}</strong></td>
@@ -400,7 +407,9 @@
                         <td style="padding:6px 8px; color:#64748b;">${escapeHtml(p.goal || '—')}</td>
                         <td style="padding:6px 8px; text-align:center;">${p.reported ? badge('reported', '#16a34a') : (p.is_late_plan ? badge('late', '#dc2626') : badge('pending', '#94a3b8'))}</td>
                         <td style="padding:6px 8px; font-size:11px; color:#475569;">${escapeHtml(p.hasil || '—')}</td>
-                      </tr>`).join('')}
+                        <td style="padding:6px 8px; font-size:11px;">${visitCell}</td>
+                      </tr>`;
+                    }).join('')}
                   </tbody></table>`;
 
               // TODO (non-AM mode — sales_todo rows)
