@@ -233,26 +233,22 @@ function renderTopbar(crumbsAttr) {
         <button class="icon-btn" id="themeToggle" aria-label="Toggle theme"></button>
 
         <div class="dd-wrap">
-          <div class="avatar" data-dropdown tabindex="0" role="button" aria-label="Account menu">JD</div>
+          <div class="avatar" id="wrgTopAvatar" data-dropdown tabindex="0" role="button" aria-label="Account menu">—</div>
           <div class="dd-menu dd-profile" role="menu">
             <div class="dd-profile-head">
-              <div class="dd-profile-name">John Doe</div>
-              <div class="dd-profile-email">john@adminator.app</div>
+              <div class="dd-profile-name" id="wrgTopName">—</div>
+              <div class="dd-profile-email" id="wrgTopRole">—</div>
             </div>
-            <a class="dd-menu-item" href="#">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              Settings
+            <a class="dd-menu-item" href="#" id="wrgChangePw">
+              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Ganti password
             </a>
-            <a class="dd-menu-item" href="#">
+            <a class="dd-menu-item" href="users.html" id="wrgUsersLink">
               <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Profile
-            </a>
-            <a class="dd-menu-item" href="email.html">
-              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
-              Messages
+              Users
             </a>
             <div class="dd-divider"></div>
-            <a class="dd-menu-item danger" href="#">
+            <a class="dd-menu-item danger" href="#" id="wrgLogoutDropdown">
               <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
               Logout
             </a>
@@ -297,38 +293,38 @@ export function mountShell() {
           location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
           return;
         }
-        // Populate sidebar footer with actual user (replaces hardcoded "John Doe")
+        // Populate sidebar footer + topbar avatar dropdown (replaces hardcoded John Doe)
         const user = data.user;
         const displayName = user.panggilan || user.nama || '?';
         const initials = displayName.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '?';
-        const avatarEl = document.getElementById('wrgUserAvatar');
-        const nameEl   = document.getElementById('wrgUserName');
-        const roleEl   = document.getElementById('wrgUserRole');
-        if (avatarEl) avatarEl.textContent = initials;
-        if (nameEl)   nameEl.textContent   = displayName;
-        if (roleEl)   roleEl.textContent   = user.role + (user.is_admin ? ' · admin' : '');
-
-
-        const wraps = document.querySelectorAll('.topbar-actions, .header-actions');
-        const userBadge = document.createElement('div');
-        userBadge.style.cssText = 'display:flex; align-items:center; gap:12px; margin-left:auto; padding-right:16px;';
-        userBadge.innerHTML = `
-          <div style="text-align:right; font-size:12px;">
-            <div style="font-weight:600;">${user.panggilan || user.nama}</div>
-            <div style="color:#94a3b8;">${user.role}${user.is_admin ? ' · admin' : ''}</div>
-          </div>
-          <button id="wrgLogout" style="padding:6px 12px; background:#f1f5f9; color:#475569; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Logout</button>
-        `;
-        // Try to append to topbar; fall back to body top
-        const topbar = document.querySelector('.topbar') || document.querySelector('header') || document.body;
-        topbar.appendChild(userBadge);
-
-        document.getElementById('wrgLogout').addEventListener('click', async () => {
-          await fetch('/api/auth/logout', { method: 'POST' });
-          location.href = '/login.html';
+        const roleLabel = user.role + (user.is_admin ? ' · admin' : '');
+        const fills = {
+          wrgUserAvatar: initials, wrgUserName: displayName, wrgUserRole: roleLabel,
+          wrgTopAvatar:  initials, wrgTopName:  displayName, wrgTopRole:  roleLabel,
+        };
+        Object.entries(fills).forEach(([id, t]) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = t;
         });
 
-        // Hide admin-only sidebar links if regular user
+        // Wire Logout (di dropdown topbar)
+        const logoutLink = document.getElementById('wrgLogoutDropdown');
+        if (logoutLink) {
+          logoutLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await fetch('/api/auth/logout', { method: 'POST' });
+            location.href = '/login.html';
+          });
+        }
+
+        // Change-password placeholder (TODO Phase 5e — wire ke endpoint nanti)
+        const cpLink = document.getElementById('wrgChangePw');
+        if (cpLink) cpLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          alert('Ganti password belum di-implement. Hubungi admin untuk reset.');
+        });
+
+        // Hide admin-only sidebar/dropdown links if regular user
         if (!user.is_admin) {
           document.querySelectorAll('a[href*="leave.html"], a[href*="holidays.html"], a[href*="users.html"]').forEach((a) => {
             a.style.display = 'none';
