@@ -21,19 +21,19 @@
 
 export const NAV = [
   {
-    label: 'WRG CRM',
+    label: 'HR',
     items: [
       { key: 'dashboard', text: 'Plan & Report', href: 'index.html',
         icon: '<path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/>' },
+      { key: 'holidays', text: 'Holidays', href: 'holidays.html',
+        icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>' },
+      { key: 'leave', text: 'Manage Leave', href: 'leave.html',
+        icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9 16l2 2 4-4"/>' },
     ],
   },
   {
     label: 'Admin',
     items: [
-      { key: 'leave', text: 'Manage Leave', href: 'leave.html',
-        icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M9 16l2 2 4-4"/>' },
-      { key: 'holidays', text: 'Holidays', href: 'holidays.html',
-        icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>' },
       { key: 'users', text: 'Users', href: 'users.html',
         icon: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>' },
     ],
