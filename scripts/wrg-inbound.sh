@@ -878,6 +878,17 @@ ${SHORT_MARK} ${CUST} → tidak ada di plan
 ⚠️ *Tanggal foto mismatch — verifikasi visit:*${MISMATCH_WARNINGS}"
   fi
 
+  # Multi-customer + only 1 photo = sebagian customers gak ada visit
+  # documentation. Photo cuma di-apply ke semua customer dengan SAMA
+  # (visit_lat/lon/timestamp identik). Warn AM supaya per-customer kirim
+  # #REPORT terpisah (1 foto per visit).
+  if [ -n "$PHOTO_PATH" ] && [ "$N" -gt 1 ]; then
+    REPLY="${REPLY}
+
+⚠️ *Foto kunjungan cuma 1, tapi report ${N} customer.* Idealnya 1 foto per visit. Kirim #REPORT terpisah per customer + foto masing-masing biar visit ke-verify per lokasi."
+    log "  #REPORT AM warn: single photo for $N customers (user=$USER_ID)"
+  fi
+
   wa_send "$GROUP_JID" "$REPLY"
   log "  #REPORT AM ok: user=$USER_ID name='$DISPLAY_NAME' entries=$N matched=$MATCHED ambiguous=$AMBIGUOUS unmatched=$UNMATCHED"
   return 0
