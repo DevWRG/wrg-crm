@@ -16,7 +16,7 @@
       })();
     </script>
   </head>
-  <body data-active="dashboard" data-crumbs="WRG CRM | Plan &amp; Report">
+  <body data-active="dashboard" data-crumbs="Workspace | Dashboard">
     <div class="shell">
       <div data-shell-sidebar></div>
       <div class="main">
@@ -25,155 +25,104 @@
         <!-- HERO -->
         <section class="hero">
           <div class="hero-text">
-            <span class="eyebrow" id="heroDate">— · — · —</span>
-            <h1 class="hero-title">WRG CRM — <span class="accent">Plan &amp; Report</span></h1>
-            <p class="hero-sub" id="heroSub">Memuat data dari <strong id="heroDb">…</strong>. Range: <span id="heroRange">…</span>.</p>
+            <span class="eyebrow" id="heroDate">Thursday · April 23 · 2026</span>
+            <h1 class="hero-title">Welcome back, <span class="accent">John</span></h1>
+            <p class="hero-sub">Total visits are <strong>+10%</strong> week over week, unique visitors steady, and bounce rate holding at 33%. Two new regions came online overnight.</p>
           </div>
           <div class="hero-actions">
-            <input type="date" id="dateFrom" class="btn btn--ghost" style="padding:6px 10px;">
-            <input type="date" id="dateTo" class="btn btn--ghost" style="padding:6px 10px;">
-            <button class="btn btn--ghost" data-preset="today">Hari ini</button>
-            <button class="btn btn--ghost" data-preset="week">Minggu ini</button>
-            <button class="btn btn--primary" id="btnApply">
-              <svg viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-              Apply
+            <button class="btn btn--ghost">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              Export
+            </button>
+            <button class="btn btn--primary">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              New report
             </button>
           </div>
         </section>
 
-        <!-- KPI CARDS — WRG: Hari Kerja, Wajib, Plan items, Reported, Late, Aktivitas, Unmatched -->
-        <section class="kpi-grid" aria-label="WRG metrics" id="kpiGrid">
-          <article class="kpi-card c-purple" data-kpi="working_days">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Hari kerja</div></div></div>
-            <div class="kpi-value" id="kpiWorking">—</div>
-            <div class="kpi-compare" id="kpiWorkingSub">range</div>
+        <!-- KPI CARDS — Total Visits / Page Views / Unique Visitors / Bounce Rate -->
+        <section class="kpi-grid" aria-label="Key metrics">
+          <article class="kpi-card c-success">
+            <div class="kpi-top">
+              <div class="kpi-identity">
+                <div class="kpi-icon success">
+                  <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
+                <div class="kpi-label">Total visits</div>
+              </div>
+              <span class="kpi-pill up">
+                <svg viewBox="0 0 24 24"><path d="M7 17l10-10M7 7h10v10"/></svg>
+                +10%
+              </span>
+            </div>
+            <div class="kpi-value">1.24<sup>M</sup></div>
+            <div class="kpi-compare">
+              <svg class="up" viewBox="0 0 24 24"><path d="M7 17l10-10M7 7h10v10"/></svg>
+              up from <strong>1.12M</strong> <span class="sep">·</span> last week
+            </div>
           </article>
-          <article class="kpi-card c-info" data-kpi="users_wajib">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Karyawan wajib</div></div></div>
-            <div class="kpi-value" id="kpiWajib">—</div>
-            <div class="kpi-compare" id="kpiWajibSub">aktif</div>
+
+          <article class="kpi-card c-danger">
+            <div class="kpi-top">
+              <div class="kpi-identity">
+                <div class="kpi-icon danger">
+                  <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/></svg>
+                </div>
+                <div class="kpi-label">Page views</div>
+              </div>
+              <span class="kpi-pill down">
+                <svg viewBox="0 0 24 24"><path d="M7 7l10 10M7 17h10V7"/></svg>
+                −7%
+              </span>
+            </div>
+            <div class="kpi-value">4.08<sup>M</sup></div>
+            <div class="kpi-compare">
+              <svg class="down" viewBox="0 0 24 24"><path d="M7 7l10 10M7 17h10V7"/></svg>
+              down from <strong>4.39M</strong> <span class="sep">·</span> last week
+            </div>
           </article>
-          <article class="kpi-card c-success" data-kpi="total_plan">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Total Plan</div></div></div>
-            <div class="kpi-value" id="kpiPlan">—</div>
-            <div class="kpi-compare" id="kpiPlanSub">kunjungan + todo</div>
+
+          <article class="kpi-card c-purple">
+            <div class="kpi-top">
+              <div class="kpi-identity">
+                <div class="kpi-icon purple">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+                </div>
+                <div class="kpi-label">Unique visitors</div>
+              </div>
+              <span class="kpi-pill flat">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+                ~12%
+              </span>
+            </div>
+            <div class="kpi-value">842<sup>K</sup></div>
+            <div class="kpi-compare">
+              <svg class="flat" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+              holding around <strong>835K</strong> <span class="sep">·</span> last week
+            </div>
           </article>
-          <article class="kpi-card c-success" data-kpi="reported">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Reported</div></div></div>
-            <div class="kpi-value" id="kpiReported">—</div>
-            <div class="kpi-compare" id="kpiReportedSub">selesai</div>
-          </article>
-          <article class="kpi-card c-danger" data-kpi="late">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Late submission</div></div></div>
-            <div class="kpi-value" id="kpiLate">—</div>
-            <div class="kpi-compare" id="kpiLateSub">submit lewat batas</div>
-          </article>
-          <article class="kpi-card c-info" data-kpi="aktivitas">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Aktivitas (report)</div></div></div>
-            <div class="kpi-value" id="kpiAkt">—</div>
-            <div class="kpi-compare" id="kpiAktSub">items report</div>
-          </article>
-          <article class="kpi-card c-warning" data-kpi="unmatched">
-            <div class="kpi-top"><div class="kpi-identity"><div class="kpi-label">Unmatched report</div></div></div>
-            <div class="kpi-value" id="kpiUnm">—</div>
-            <div class="kpi-compare" id="kpiUnmSub">tidak match plan</div>
+
+          <article class="kpi-card c-primary">
+            <div class="kpi-top">
+              <div class="kpi-identity">
+                <div class="kpi-icon primary">
+                  <svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+                </div>
+                <div class="kpi-label">Bounce rate</div>
+              </div>
+              <span class="kpi-pill info">
+                <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+                steady
+              </span>
+            </div>
+            <div class="kpi-value">33<sup>%</sup></div>
+            <div class="kpi-compare">
+              <svg class="info" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+              matching <strong>33%</strong> <span class="sep">·</span> last week
+            </div>
           </article>
         </section>
-
-        <!-- WRG inline JS — fetch /api endpoints + populate KPI strip -->
-        <script>
-          (function () {
-            'use strict';
-            const $ = (id) => document.getElementById(id);
-            const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString('id-ID'));
-
-            function defaultRange() {
-              const today = new Date();
-              const dow = today.getDay() || 7; // Mon=1..Sun=7
-              const mon = new Date(today); mon.setDate(today.getDate() - (dow - 1));
-              const fri = new Date(mon);   fri.setDate(mon.getDate() + 4);
-              const end = fri < today ? fri : today;
-              const iso = (d) => d.toISOString().slice(0, 10);
-              return [iso(mon), iso(end)];
-            }
-
-            const state = { from: null, to: null, env: null, db: null };
-
-            async function fetchEnv() {
-              const r = await fetch('/api/env');
-              if (!r.ok) throw new Error('env failed');
-              return r.json();
-            }
-            async function fetchSummary(d1, d2) {
-              const r = await fetch(`/api/summary?from=${d1}&to=${d2}`);
-              if (!r.ok) throw new Error('summary failed');
-              return r.json();
-            }
-
-            function renderKpi(s) {
-              const totalPlan = (s.total_plan_visits || 0) + (s.total_todo_items || 0);
-              const reported  = (s.plan_reported || 0) + (s.todo_items_matched || 0);
-              const aktivitas = (s.total_activity || 0) + (s.todo_items_matched || 0) + (s.todo_items_unmatched || 0);
-              const unmatched = (s.unmatched_activity || 0) + (s.todo_items_unmatched || 0);
-              const late      = (s.plan_late || 0) + (s.todo_late || 0);
-              const compPct   = totalPlan > 0 ? Math.round(reported / totalPlan * 100) : null;
-
-              $('kpiWorking').textContent  = fmtNum(s.working_days);
-              $('kpiWorkingSub').textContent = `${state.from} → ${state.to}`;
-              $('kpiWajib').textContent    = fmtNum(s.users_wajib);
-              $('kpiWajibSub').textContent = `dari ${s.users_aktif || 0} aktif`;
-              $('kpiPlan').textContent     = fmtNum(totalPlan);
-              $('kpiPlanSub').textContent  = `${s.total_plan_visits || 0} kunjungan + ${s.total_todo_items || 0} todo`;
-              $('kpiReported').textContent = fmtNum(reported);
-              $('kpiReportedSub').textContent = compPct == null ? '—' : `${compPct}% selesai`;
-              $('kpiLate').textContent     = fmtNum(late);
-              $('kpiAkt').textContent      = fmtNum(aktivitas);
-              $('kpiUnm').textContent      = fmtNum(unmatched);
-            }
-
-            async function refresh() {
-              try {
-                const env = await fetchEnv();
-                state.env = env.env; state.db = env.db;
-                if (!state.from || !state.to) {
-                  state.from = env.default_from; state.to = env.default_to;
-                }
-                $('dateFrom').value = state.from;
-                $('dateTo').value = state.to;
-                $('heroDb').textContent = state.db;
-                $('heroRange').textContent = `${state.from} → ${state.to}`;
-                $('heroDate').textContent = new Date(env.today).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-                const sum = await fetchSummary(state.from, state.to);
-                renderKpi(sum.summary || {});
-              } catch (e) {
-                console.error('WRG refresh failed:', e);
-                $('heroSub').textContent = 'Gagal load data: ' + e.message;
-              }
-            }
-
-            document.addEventListener('DOMContentLoaded', () => {
-              $('btnApply').addEventListener('click', () => {
-                state.from = $('dateFrom').value;
-                state.to = $('dateTo').value;
-                refresh();
-              });
-              document.querySelectorAll('[data-preset]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                  const preset = btn.dataset.preset;
-                  const today = new Date().toISOString().slice(0, 10);
-                  if (preset === 'today') {
-                    state.from = today; state.to = today;
-                  } else if (preset === 'week') {
-                    [state.from, state.to] = defaultRange();
-                  }
-                  refresh();
-                });
-              });
-              refresh();
-            });
-          })();
-        </script>
 
         <!-- ============ PANEL GRID ============ -->
         <div class="grid">
