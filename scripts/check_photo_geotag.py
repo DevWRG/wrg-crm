@@ -12,9 +12,20 @@ Mengandalkan pytesseract + Pillow. Crop bottom 30% (watermark area)
 untuk akurasi OCR + speed.
 """
 import sys
+import os
 import re
 import json
 from pathlib import Path
+
+# Force UTF-8 stdio (cron / launchd env often lacks LANG).
+os.environ.setdefault("LANG", "en_US.UTF-8")
+os.environ.setdefault("LC_ALL", "en_US.UTF-8")
+os.environ.setdefault("PYTHONUTF8", "1")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 
 def main():
@@ -28,10 +39,9 @@ def main():
         sys.exit(1)
 
     try:
-        import pytesseract
         from PIL import Image
     except ImportError as e:
-        print(json.dumps({"error": f"missing dep: {e}"}))
+        print(json.dumps({"error": f"missing PIL: {e}"}))
         sys.exit(1)
 
     result = {
@@ -44,11 +54,38 @@ def main():
     }
 
     try:
+        import subprocess
+        import tempfile
+
         img = Image.open(path)
         w, h = img.size
         # Crop bottom 30% — watermark area (Geo-Tagging Camera, GPS Map Camera, etc.)
         crop = img.crop((0, int(h * 0.70), w, h))
-        text = pytesseract.image_to_string(crop)
+
+        # Call tesseract directly via subprocess (avoids pytesseract's locale-
+        # sensitive decoding which fails in cron env). Save crop ke tempfile,
+        # tesseract reads file → outputs to stdout, decode dengan errors='replace'.
+        # macOS TCC blocks tesseract from reading /tmp — use project-local tmp dir.
+        tmp_dir = Path(__file__).resolve().parent.parent / "tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(suffix=".jpg", dir=str(tmp_dir))
+        os.close(fd)
+        crop.convert("RGB").save(tmp_path, format="JPEG", quality=90)
+        if not (os.path.isfile(tmp_path) and os.path.getsize(tmp_path) > 0):
+            result["error"] = f"tmpfile write failed: {tmp_path}"
+            print(json.dumps(result, ensure_ascii=False)); sys.exit(0)
+        try:
+            proc = subprocess.run(
+                ["/opt/homebrew/bin/tesseract", tmp_path, "-", "-l", "eng"],
+                capture_output=True, timeout=15,
+            )
+            text = proc.stdout.decode("utf-8", errors="replace")
+            if not text.strip():
+                result["tesseract_stderr"] = proc.stderr.decode("utf-8", errors="replace")[:300]
+                result["tesseract_returncode"] = proc.returncode
+        finally:
+            os.unlink(tmp_path)
+
         result["raw_ocr"] = text
 
         # Coords: "Lat -7.282302 Long 112.754749"
