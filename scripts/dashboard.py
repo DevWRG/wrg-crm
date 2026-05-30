@@ -538,6 +538,40 @@ def text_response(handler, body, ctype="text/plain; charset=utf-8", status=200):
     handler.wfile.write(body)
 
 
+# Adminator frontend dist/ — built via `cd frontend && npm run build`.
+# Override via WRG_FRONTEND_DIST env var (production deploy points to a different
+# location). Falls back to legacy inline INDEX_HTML if dist/ not present.
+FRONTEND_DIST = Path(os.environ.get("WRG_FRONTEND_DIST", "")) \
+    if os.environ.get("WRG_FRONTEND_DIST") \
+    else Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+import mimetypes as _mimetypes
+
+
+def serve_static(handler, file_path: Path):
+    """Serve a file from FRONTEND_DIST. Returns True if served, False otherwise."""
+    if not file_path.is_file():
+        return False
+    ctype, _ = _mimetypes.guess_type(str(file_path))
+    if not ctype:
+        ctype = "application/octet-stream"
+    try:
+        body = file_path.read_bytes()
+    except OSError:
+        return False
+    handler.send_response(200)
+    handler.send_header("Content-Type", ctype)
+    handler.send_header("Content-Length", str(len(body)))
+    # Hashed asset filenames (Adminator uses content-hashed names) → safe to cache.
+    if any(part in file_path.name for part in (".", "-")) and file_path.suffix in (".js", ".css", ".woff", ".woff2", ".ttf", ".svg", ".png", ".jpg", ".jpeg", ".gif"):
+        handler.send_header("Cache-Control", "public, max-age=86400")
+    else:
+        handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    handler.wfile.write(body)
+    return True
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         parsed = urlparse(self.path)
@@ -545,7 +579,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
 
         try:
+            # Default route: serve Adminator's index.html if dist/ exists,
+            # else fall back to legacy inline HTML.
             if path == "/" or path == "/index.html":
+                idx = FRONTEND_DIST / "index.html"
+                if idx.is_file():
+                    if serve_static(self, idx):
+                        return
                 return text_response(self, INDEX_HTML, "text/html; charset=utf-8")
 
             if path == "/api/env":
@@ -596,6 +636,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return json_response(self, {"error": "user_id required"}, 400)
                 data = psql_json(SQL_DRILLDOWN_USER.format(user_id=int(uid), d1=d1, d2=d2), env=env)
                 return json_response(self, {"from": d1, "to": d2, "env": env, "detail": data or {}})
+
+            # Static fallback: any path that maps to a real file in
+            # FRONTEND_DIST. Path traversal guarded by resolving + checking
+            # parent. Allows Adminator to serve /assets/..., /*.html, etc.
+            if FRONTEND_DIST.is_dir() and not path.startswith("/api/"):
+                rel = path.lstrip("/") or "index.html"
+                candidate = (FRONTEND_DIST / rel).resolve()
+                try:
+                    candidate.relative_to(FRONTEND_DIST.resolve())
+                except ValueError:
+                    return text_response(self, "forbidden", status=403)
+                if candidate.is_file() and serve_static(self, candidate):
+                    return
 
             return text_response(self, "not found", status=404)
 
