@@ -373,9 +373,9 @@
               if (!r.ok) return;
               const json = await r.json();
               const days = json.days || [];
-              const labels = days.map((d) => d.tanggal);
-              const planData = days.map((d) => (d.total_plan_visits || 0) + (d.total_todo_items || 0));
-              const reportData = days.map((d) => (d.total_activity || 0) + (d.todo_items_matched || 0) + (d.todo_items_unmatched || 0));
+              const labels = days.map((d) => d.date);
+              const planData = days.map((d) => (d.plan_visits || 0) + (d.todo_items || 0));
+              const reportData = days.map((d) => (d.total_activity || 0) + (d.todo_reported || 0));
               const lateData = days.map((d) => (d.plan_late || 0) + (d.todo_late || 0));
 
               if (wrgChart) wrgChart.destroy();

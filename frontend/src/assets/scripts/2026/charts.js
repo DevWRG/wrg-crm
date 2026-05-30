@@ -12,6 +12,12 @@
 import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 
+// Expose Chart globally so inline <script> blocks (WRG dashboard) can use it
+// without re-importing or re-bundling. Tied to webpack bundle lifecycle.
+if (typeof window !== 'undefined') {
+  window.Chart = Chart;
+}
+
 function tokens() {
   const cs = getComputedStyle(document.documentElement);
   return {
