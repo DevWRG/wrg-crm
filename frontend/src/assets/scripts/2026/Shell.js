@@ -117,10 +117,10 @@ function renderSidebar(activeKey) {
       ${sections}
       <div class="sidebar-footer">
         <div class="workspace">
-          <div class="workspace-avatar">JD</div>
+          <div class="workspace-avatar" id="wrgUserAvatar">—</div>
           <div class="workspace-text">
-            <div class="workspace-name">John Doe</div>
-            <div class="workspace-role">admin</div>
+            <div class="workspace-name" id="wrgUserName">—</div>
+            <div class="workspace-role" id="wrgUserRole">—</div>
           </div>
           <svg class="workspace-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="m7 9 5-5 5 5"/><path d="m7 15 5 5 5-5"/>
@@ -297,8 +297,18 @@ export function mountShell() {
           location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
           return;
         }
-        // Inject user info + logout button into topbar
+        // Populate sidebar footer with actual user (replaces hardcoded "John Doe")
         const user = data.user;
+        const displayName = user.panggilan || user.nama || '?';
+        const initials = displayName.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '?';
+        const avatarEl = document.getElementById('wrgUserAvatar');
+        const nameEl   = document.getElementById('wrgUserName');
+        const roleEl   = document.getElementById('wrgUserRole');
+        if (avatarEl) avatarEl.textContent = initials;
+        if (nameEl)   nameEl.textContent   = displayName;
+        if (roleEl)   roleEl.textContent   = user.role + (user.is_admin ? ' · admin' : '');
+
+
         const wraps = document.querySelectorAll('.topbar-actions, .header-actions');
         const userBadge = document.createElement('div');
         userBadge.style.cssText = 'display:flex; align-items:center; gap:12px; margin-left:auto; padding-right:16px;';
