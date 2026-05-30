@@ -5,6 +5,7 @@ const
 
 const titles = {
   'index': 'WRG CRM · Dashboard',
+  'login': 'WRG CRM · Login',
   'leave': 'WRG CRM · Manage Leave',
   'holidays': 'WRG CRM · Manage Holidays',
   'users': 'WRG CRM · Manage Users',

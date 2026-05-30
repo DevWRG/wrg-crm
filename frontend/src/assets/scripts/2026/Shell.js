@@ -285,4 +285,48 @@ export function mountShell() {
   if (sidebarHost) sidebarHost.outerHTML = renderSidebar(activeKey);
   if (topbarHost)  topbarHost.outerHTML  = renderTopbar(crumbs);
   if (footerHost)  footerHost.outerHTML  = renderFooter();
+
+  // Auth bootstrap — WRG pages (Adminator demo pages bypass).
+  // Skip on login page itself. Check /api/auth/me, redirect to login if 401.
+  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users'].includes(activeKey);
+  if (isWrgPage) {
+    fetch('/api/auth/me')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) {
+          location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
+          return;
+        }
+        // Inject user info + logout button into topbar
+        const user = data.user;
+        const wraps = document.querySelectorAll('.topbar-actions, .header-actions');
+        const userBadge = document.createElement('div');
+        userBadge.style.cssText = 'display:flex; align-items:center; gap:12px; margin-left:auto; padding-right:16px;';
+        userBadge.innerHTML = `
+          <div style="text-align:right; font-size:12px;">
+            <div style="font-weight:600;">${user.panggilan || user.nama}</div>
+            <div style="color:#94a3b8;">${user.role}${user.is_admin ? ' · admin' : ''}</div>
+          </div>
+          <button id="wrgLogout" style="padding:6px 12px; background:#f1f5f9; color:#475569; border:none; border-radius:6px; cursor:pointer; font-size:12px;">Logout</button>
+        `;
+        // Try to append to topbar; fall back to body top
+        const topbar = document.querySelector('.topbar') || document.querySelector('header') || document.body;
+        topbar.appendChild(userBadge);
+
+        document.getElementById('wrgLogout').addEventListener('click', async () => {
+          await fetch('/api/auth/logout', { method: 'POST' });
+          location.href = '/login.html';
+        });
+
+        // Hide admin-only sidebar links if regular user
+        if (!user.is_admin) {
+          document.querySelectorAll('a[href*="leave.html"], a[href*="holidays.html"], a[href*="users.html"]').forEach((a) => {
+            a.style.display = 'none';
+          });
+        }
+      })
+      .catch(() => {
+        location.href = '/login.html?next=' + encodeURIComponent(location.pathname);
+      });
+  }
 }

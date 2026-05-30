@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login · WRG CRM</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('dash26-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body data-active="login" data-crumbs="" style="background:#f1f5f9; min-height:100vh; display:flex; align-items:center; justify-content:center;">
+    <div style="max-width:420px; width:90%; background:#fff; padding:40px; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,0.08);">
+      <div style="text-align:center; margin-bottom:24px;">
+        <div style="font-size:14px; color:#64748b; letter-spacing:0.05em; text-transform:uppercase;">WRG CRM</div>
+        <h1 style="margin:8px 0 0; font-size:28px;">Plan &amp; Report</h1>
+        <p style="margin:8px 0 0; color:#64748b; font-size:14px;">Login pakai panggilan / nama / nomor WA</p>
+      </div>
+
+      <form id="loginForm">
+        <div style="margin-bottom:16px;">
+          <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Username</label>
+          <input type="text" id="fIdent" required autocomplete="username" placeholder="Husni / boni / +6285…"
+            style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; font-size:14px;">
+        </div>
+        <div style="margin-bottom:20px;">
+          <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Password</label>
+          <input type="password" id="fPw" required autocomplete="current-password"
+            style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; font-size:14px;">
+        </div>
+        <button type="submit" id="btnLogin"
+          style="width:100%; padding:12px; background:#2563eb; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer;">
+          Login
+        </button>
+        <div id="loginErr" style="color:#dc2626; font-size:13px; margin-top:12px; min-height:20px;"></div>
+      </form>
+
+      <div style="margin-top:24px; padding-top:20px; border-top:1px solid #f1f5f9; font-size:12px; color:#94a3b8; text-align:center;">
+        Belum punya password? Hubungi admin sistem.
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+        const $ = (id) => document.getElementById(id);
+
+        // If already logged in, redirect to dashboard
+        fetch('/api/auth/me').then((r) => { if (r.ok) location.href = '/index.html'; });
+
+        $('loginForm').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          $('btnLogin').disabled = true;
+          $('btnLogin').textContent = 'Memproses…';
+          $('loginErr').textContent = '';
+          try {
+            const r = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: $('fIdent').value.trim(), password: $('fPw').value }),
+            });
+            const json = await r.json();
+            if (!r.ok) {
+              $('loginErr').textContent = json.error || 'Login gagal.';
+              $('btnLogin').disabled = false;
+              $('btnLogin').textContent = 'Login';
+              return;
+            }
+            const nextUrl = new URLSearchParams(location.search).get('next') || '/index.html';
+            location.href = nextUrl;
+          } catch (err) {
+            $('loginErr').textContent = 'Network error: ' + err.message;
+            $('btnLogin').disabled = false;
+            $('btnLogin').textContent = 'Login';
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
