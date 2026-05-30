@@ -196,8 +196,8 @@
                 <span class="eyebrow">Drilldown</span>
                 <h2 class="card-title" id="tabTitle">Per Orang</h2>
               </div>
-              <div style="display:flex; gap:8px;">
-                <button class="btn btn--ghost" data-tab="orang">Per Orang</button>
+              <div style="display:flex; gap:8px;" id="tabNav">
+                <button class="btn btn--primary" data-tab="orang">Per Orang</button>
                 <button class="btn btn--ghost" data-tab="divisi">Per Divisi</button>
                 <button class="btn btn--ghost" data-tab="cabang">Per Cabang</button>
                 <button class="btn btn--ghost" data-tab="hod">Per HOD Sales</button>
@@ -334,6 +334,15 @@
             async function loadTab(tab) {
               tabState.current = tab;
               $('tabTitle').textContent = ({ orang: 'Per Orang', divisi: 'Per Divisi', cabang: 'Per Cabang', hod: 'Per HOD Sales' })[tab];
+              // Update active state on tab nav buttons
+              document.querySelectorAll('#tabNav [data-tab]').forEach((btn) => {
+                btn.classList.remove('btn--primary');
+                btn.classList.add('btn--ghost');
+                if (btn.dataset.tab === tab) {
+                  btn.classList.remove('btn--ghost');
+                  btn.classList.add('btn--primary');
+                }
+              });
               const [d1, d2] = getRange();
               if (!d1 || !d2) return;
               const r = await fetch(`/api/per-${tab}?from=${d1}&to=${d2}`);
