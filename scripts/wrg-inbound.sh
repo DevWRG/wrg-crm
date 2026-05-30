@@ -568,23 +568,60 @@ handle_report_am() {
   ENTRIES_JSON=$(echo "$BODY" | python3 -c '
 import sys, re, json
 body = sys.stdin.read()
-# Drop the first line (the hashtag line) and tgl: line
+# Drop hashtag line + tgl: line
 lines = [l for l in body.splitlines()
          if not re.match(r"^\s*#report", l, re.I)
          and not re.match(r"^\s*tgl\s*:", l, re.I)]
-text = "\n".join(lines)
-chunks = re.split(r"\n\s*---\s*\n", text) if "---" in text else [text]
+
+# Accept two formats:
+#   A) Explicit:  cust: NAME / hasil: ... / next: ...
+#                 Multiple entries separated by ---
+#   B) Numbered:  1. NAME / hasil: ... / next: ...
+#                 2. NAME / hasil: ... / next: ...
+# Strip unicode invisible chars + numbering when present.
+
+def strip_num(s):
+    # Strip leading "N." or "N)" + any non-letter chars (incl. U+2060)
+    return re.sub(r"^\s*[0-9]+[.)][^A-Za-z]*", "", s).strip()
+
 out = []
-for chunk in chunks:
-    chunk = chunk.strip()
-    if not chunk: continue
-    e = {"cust": "", "hasil": "", "next": ""}
-    for line in chunk.splitlines():
-        m = re.match(r"^\s*(cust|hasil|next)\s*:\s*(.+?)\s*$", line, re.I)
-        if m:
-            e[m.group(1).lower()] = m.group(2).strip()
-    if e["cust"] and e["hasil"]:
-        out.append(e)
+current = None
+
+def flush():
+    global current
+    if current and current.get("cust") and current.get("hasil"):
+        out.append(current)
+    current = None
+
+for raw in lines:
+    line = raw.rstrip()
+    if not line.strip():
+        continue
+    # Entry boundary
+    if re.match(r"^\s*---\s*$", line):
+        flush()
+        continue
+    # Numbered customer line: "1. NAME" / "2) NAME"
+    mnum = re.match(r"^\s*[0-9]+[.)]\s*(.+?)\s*$", line)
+    # Keyed lines
+    mkey = re.match(r"^\s*(cust|hasil|next)\s*:\s*(.+?)\s*$", line, re.I)
+
+    if mkey:
+        key = mkey.group(1).lower()
+        val = mkey.group(2).strip()
+        if key == "cust":
+            flush()
+            current = {"cust": strip_num(val), "hasil": "", "next": ""}
+        else:
+            if current is None:
+                current = {"cust": "", "hasil": "", "next": ""}
+            current[key] = val
+    elif mnum:
+        # Numbered customer header — start new entry
+        flush()
+        current = {"cust": strip_num(line), "hasil": "", "next": ""}
+
+flush()
 print(json.dumps(out, ensure_ascii=False))
 ' 2>/dev/null)
 
