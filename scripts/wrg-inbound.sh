@@ -751,8 +751,31 @@ next: ..."
     " 2>/dev/null | head -1)
 
     if [ -n "$INSERTED_ID" ] && [ "$PLAN_ID" != "NULL" ]; then
+      # Build visit geo SET clause kalau ada photo geotag valid
+      local VISIT_SQL=""
+      if [ -n "$PHOTO_GEOTAG" ]; then
+        local V_LAT V_LON V_TS_ISO V_MISMATCH
+        V_LAT=$(echo "$PHOTO_GEOTAG" | jq -r '.lat // empty')
+        V_LON=$(echo "$PHOTO_GEOTAG" | jq -r '.lon // empty')
+        V_TS_ISO=$(echo "$PHOTO_GEOTAG" | jq -r '.timestamp_iso // empty')
+        if [ -n "$V_LAT" ] && [ -n "$V_LON" ]; then
+          # Check date match between photo timestamp + plan tanggal
+          V_MISMATCH="FALSE"
+          if [ -n "$V_TS_ISO" ]; then
+            local TS_DATE
+            TS_DATE=$(echo "$V_TS_ISO" | cut -d' ' -f1)
+            [ "$TS_DATE" != "$TGL_ISO" ] && V_MISMATCH="TRUE"
+            VISIT_SQL=", visit_lat = $V_LAT, visit_lon = $V_LON, visit_timestamp = '$V_TS_ISO', visit_date_mismatch = $V_MISMATCH"
+            if [ "$V_MISMATCH" = "TRUE" ]; then
+              log "  #REPORT AM warn: photo date $TS_DATE mismatch plan tanggal $TGL_ISO (user=$USER_ID plan=$PLAN_ID)"
+            fi
+          else
+            VISIT_SQL=", visit_lat = $V_LAT, visit_lon = $V_LON"
+          fi
+        fi
+      fi
       $PSQL -c "
-        UPDATE sales_plan SET reported = TRUE, reported_at = NOW(), activity_id = $INSERTED_ID
+        UPDATE sales_plan SET reported = TRUE, reported_at = NOW(), activity_id = $INSERTED_ID$VISIT_SQL
         WHERE id = $PLAN_ID;
       " >/dev/null 2>>"$LOG_DIR/daily.log"
     fi

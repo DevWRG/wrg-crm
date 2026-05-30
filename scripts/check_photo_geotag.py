@@ -111,11 +111,24 @@ def main():
                 pass
 
         # Timestamp: "2026/05/30 21:46" or "31/05/2026, 00:44"
-        mt = re.search(r'(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2})', text)
-        if not mt:
-            mt = re.search(r'(\d{2}/\d{2}/\d{4},?\s+\d{2}:\d{2})', text)
+        # Normalize ke ISO 'YYYY-MM-DD HH:MM' di timestamp_iso (Postgres parseable).
+        import datetime
+        result["timestamp_iso"] = None
+        mt = re.search(r'(\d{4})/(\d{2})/(\d{2})\s+(\d{2}):(\d{2})', text)
         if mt:
-            result["timestamp"] = mt.group(1)
+            result["timestamp"] = f"{mt.group(1)}/{mt.group(2)}/{mt.group(3)} {mt.group(4)}:{mt.group(5)}"
+            try:
+                result["timestamp_iso"] = f"{mt.group(1)}-{mt.group(2)}-{mt.group(3)} {mt.group(4)}:{mt.group(5)}:00"
+            except ValueError:
+                pass
+        else:
+            mt = re.search(r'(\d{2})/(\d{2})/(\d{4}),?\s+(\d{2}):(\d{2})', text)
+            if mt:
+                result["timestamp"] = f"{mt.group(1)}/{mt.group(2)}/{mt.group(3)} {mt.group(4)}:{mt.group(5)}"
+                try:
+                    result["timestamp_iso"] = f"{mt.group(3)}-{mt.group(2)}-{mt.group(1)} {mt.group(4)}:{mt.group(5)}:00"
+                except ValueError:
+                    pass
 
         # Address: line starting with "Jl." or "Kec." or containing "Indonesia"
         addr_lines = [l.strip() for l in text.split("\n")
