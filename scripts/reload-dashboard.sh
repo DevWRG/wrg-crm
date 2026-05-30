@@ -22,6 +22,15 @@ mkdir -p "$DST_DIR"
 cp "$SRC" "$DST"
 echo "Synced: $SRC -> $DST"
 
+# Sync sibling Python modules (split from dashboard.py — 2026-05-30 refactor).
+# All modules must live in same dir as dashboard.py untuk import resolution.
+for mod in wrg_db.py wrg_auth.py wrg_queries.py; do
+  if [ -f "/Users/development/Documents/wrg-crm/scripts/$mod" ]; then
+    cp "/Users/development/Documents/wrg-crm/scripts/$mod" "$DST_DIR/$mod"
+    echo "Synced module: $mod"
+  fi
+done
+
 if [ -d "$FRONTEND_SRC" ]; then
   rsync -a --delete "$FRONTEND_SRC/" "$FRONTEND_DST/"
   echo "Synced frontend: $FRONTEND_SRC -> $FRONTEND_DST"
