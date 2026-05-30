@@ -265,6 +265,7 @@
                 { key: 'reported', label: 'Reported', align: 'right' },
                 { key: 'completion', label: '% Selesai', align: 'right', render: (v) => v == null ? '—' : `${v}%` },
                 { key: 'total_late', label: 'Late', align: 'right' },
+                { key: 'unmatched', label: 'Unmatched', align: 'right' },
               ],
               hod: [
                 { key: 'hod_panggilan', label: 'HOD' },
@@ -298,6 +299,7 @@
             }
             function enrichCabang(r) {
               r.reported = (r.plan_reported || 0) + (r.todo_items_matched || 0);
+              r.unmatched = (r.unmatched_activity || 0) + (r.todo_items_unmatched || 0);
               const d = r.total_plan || 0;
               r.completion = d > 0 ? Math.round((r.reported / d) * 100) : null;
               return r;
