@@ -1,0 +1,70 @@
+# ----------------------------
+# Generated Files & Folders
+# ----------------------------
+
+# [1] : Windows thumbnail cache files.
+# [2] : Folder config file.
+# [3] : Recycle Bin used on file shares.
+
+.idea
+.DS_Store
+.sass-cache
+Thumbs.db     # [1]
+ehthumbs.db   # [1]
+Desktop.ini   # [2]
+$RECYCLE.BIN  # [3]
+
+# ----------------------------
+# Packaging
+# ----------------------------
+
+logs
+*.log
+npm-debug.log*
+node_modules
+yarn.lock
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+# ----------------------------
+# Project Folders
+# ----------------------------
+
+build/
+dist/
+
+# ----------------------------
+# Development Files
+# ----------------------------
+
+*.map
+*.ts
+tsconfig.json
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# ----------------------------
+# Editor Directories
+# ----------------------------
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ----------------------------
+# OS Files
+# ----------------------------
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+CLAUDE.md
+release.md

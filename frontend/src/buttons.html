@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Buttons · 2026 Redesign Preview</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('dash26-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body data-active="buttons" data-crumbs="Components | Buttons">
+    <div class="shell">
+      <div data-shell-sidebar></div>
+      <div class="main">
+        <div data-shell-topbar></div>
+        <main class="content">
+        <section class="hero">
+          <div class="hero-text">
+            <span class="eyebrow">Components · 01</span>
+            <h1 class="hero-title">Buttons</h1>
+            <p class="hero-sub">Solid, soft, outline, and ghost variants — plus sizes, icons, button groups, and loading states. All theme-aware.</p>
+          </div>
+        </section>
+
+        <div class="grid">
+          <section class="col-12 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Style · Solid</span>
+                <h2 class="card-title">Filled buttons</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <button class="btn btn--primary">Primary</button>
+              <button class="btn btn--secondary">Secondary</button>
+              <button class="btn btn--success">Success</button>
+              <button class="btn btn--warning">Warning</button>
+              <button class="btn btn--danger">Danger</button>
+              <button class="btn btn--info">Info</button>
+              <button class="btn btn--ghost">Ghost</button>
+            </div>
+          </section>
+
+          <section class="col-12 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Style · Soft</span>
+                <h2 class="card-title">Soft / tonal buttons</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <button class="btn btn--soft-primary">Primary</button>
+              <button class="btn btn--soft-success">Success</button>
+              <button class="btn btn--soft-warning">Warning</button>
+              <button class="btn btn--soft-danger">Danger</button>
+              <button class="btn btn--soft-info">Info</button>
+            </div>
+          </section>
+
+          <section class="col-12 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Style · Outline</span>
+                <h2 class="card-title">Outline buttons</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <button class="btn btn--outline-primary">Primary</button>
+              <button class="btn btn--outline-success">Success</button>
+              <button class="btn btn--outline-danger">Danger</button>
+              <button class="btn btn--ghost">Ghost</button>
+            </div>
+          </section>
+
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Sizing</span>
+                <h2 class="card-title">Three sizes</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <button class="btn btn--primary btn--sm">Small</button>
+              <button class="btn btn--primary">Default</button>
+              <button class="btn btn--primary btn--lg">Large</button>
+            </div>
+            <div class="demo-row" style="margin-top: 12px;">
+              <button class="btn btn--ghost btn--sm">Small</button>
+              <button class="btn btn--ghost">Default</button>
+              <button class="btn btn--ghost btn--lg">Large</button>
+            </div>
+          </section>
+
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Icons</span>
+                <h2 class="card-title">Leading & trailing</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <button class="btn btn--primary"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New</button>
+              <button class="btn btn--ghost">Continue <svg viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+              <button class="btn btn--soft-primary"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Add</button>
+              <button class="btn btn--primary btn--icon" aria-label="Add"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+              <button class="btn btn--ghost btn--icon" aria-label="Settings">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </button>
+            </div>
+          </section>
+
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Group</span>
+                <h2 class="card-title">Segmented control</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <div class="btn-group">
+                <button class="btn btn--ghost is-active">Day</button>
+                <button class="btn btn--ghost">Week</button>
+                <button class="btn btn--ghost">Month</button>
+                <button class="btn btn--ghost">Year</button>
+              </div>
+            </div>
+            <div class="demo-row" style="margin-top: 14px;">
+              <div class="btn-group">
+                <button class="btn btn--ghost btn--icon" aria-label="Bold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h8a4 4 0 0 1 0 8H6zM6 12h9a4 4 0 0 1 0 8H6z"/></svg></button>
+                <button class="btn btn--ghost btn--icon" aria-label="Italic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
+                <button class="btn btn--ghost btn--icon" aria-label="Underline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v7a6 6 0 0 0 12 0V3M4 21h16"/></svg></button>
+                <button class="btn btn--ghost btn--icon is-active" aria-label="Link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+              </div>
+            </div>
+          </section>
+
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">State</span>
+                <h2 class="card-title">Disabled & loading</h2>
+              </div>
+            </div>
+            <div class="demo-row">
+              <button class="btn btn--primary" disabled style="opacity: 0.5; cursor: not-allowed;">Disabled</button>
+              <button class="btn btn--ghost" disabled style="opacity: 0.5; cursor: not-allowed;">Disabled</button>
+              <button class="btn btn--primary">
+                <span class="spinner sm" style="border-color: rgba(255,255,255,0.35); border-top-color: #fff;"></span>
+                Saving...
+              </button>
+              <button class="btn btn--soft-primary">
+                <span class="spinner sm" style="border-color: var(--primary-soft); border-top-color: var(--primary);"></span>
+                Loading
+              </button>
+            </div>
+          </section>
+        </div>
+        </main>
+        <div data-shell-footer></div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Forms · 2026 Redesign Preview</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('dash26-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body data-active="forms" data-crumbs="Components | Forms">
+    <div class="shell">
+      <div data-shell-sidebar></div>
+      <div class="main">
+        <div data-shell-topbar></div>
+        <main class="content">
+        <section class="hero">
+          <div class="hero-text">
+            <span class="eyebrow">Components · 03</span>
+            <h1 class="hero-title">Forms</h1>
+            <p class="hero-sub">Inputs, selects, textareas, switches, checkboxes, validation states — and a working "Profile settings" form to show how it all comes together.</p>
+          </div>
+          <div class="hero-actions">
+            <button class="btn btn--ghost">Cancel</button>
+            <button class="btn btn--primary">Save changes</button>
+          </div>
+        </section>
+
+        <div class="grid">
+
+          <!-- Working profile form -->
+          <section class="col-12 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Live example</span>
+                <h2 class="card-title">Profile settings</h2>
+              </div>
+              <span class="badge solid">DRAFT</span>
+            </div>
+
+            <form onsubmit="event.preventDefault(); alert(\'Saved (demo)\');">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="field-label" for="first">First name <span class="req">*</span></label>
+                  <input id="first" class="input" type="text" value="John" required>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="last">Last name <span class="req">*</span></label>
+                  <input id="last" class="input" type="text" value="Doe" required>
+                </div>
+                <div class="field span-2">
+                  <label class="field-label" for="email">Work email</label>
+                  <div class="input-icon">
+                    <span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span>
+                    <input id="email" class="input" type="email" value="john@adminator.app">
+                  </div>
+                  <div class="field-help">Used for sign-in and account notifications.</div>
+                </div>
+
+                <div class="field">
+                  <label class="field-label" for="role">Role</label>
+                  <select id="role" class="select">
+                    <option>Owner</option>
+                    <option selected>Admin</option>
+                    <option>Editor</option>
+                    <option>Viewer</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="tz">Timezone</label>
+                  <select id="tz" class="select">
+                    <option>UTC</option>
+                    <option selected>Europe/Riga</option>
+                    <option>America/New_York</option>
+                    <option>Asia/Tokyo</option>
+                  </select>
+                </div>
+
+                <div class="field span-2">
+                  <label class="field-label" for="url">Website</label>
+                  <div class="input-group">
+                    <span class="addon">https://</span>
+                    <input id="url" class="input" type="text" placeholder="yourdomain.com">
+                  </div>
+                </div>
+
+                <div class="field span-2">
+                  <label class="field-label" for="bio">Short bio</label>
+                  <textarea id="bio" class="textarea" placeholder="A few sentences about yourself…">Engineering lead. Building admin tools that don\'t hate their users.</textarea>
+                  <div class="field-help">Up to 280 characters. Markdown supported.</div>
+                </div>
+              </div>
+
+              <div class="section-h" style="margin: 24px 0 12px;">Notifications <span class="num">02</span></div>
+              <div class="form-grid">
+                <label class="switch span-2"><input type="checkbox" checked><span class="track"></span> Weekly product updates</label>
+                <label class="switch span-2"><input type="checkbox" checked><span class="track"></span> Mentions and replies</label>
+                <label class="switch span-2"><input type="checkbox"><span class="track"></span> Marketing newsletter</label>
+                <label class="switch span-2"><input type="checkbox" checked><span class="track"></span> Two-factor auth reminders</label>
+              </div>
+
+              <div class="form-actions">
+                <span class="badge dot success">All changes saved automatically</span>
+                <span class="spacer"></span>
+                <button type="button" class="btn btn--ghost">Cancel</button>
+                <button type="submit" class="btn btn--primary">Save profile</button>
+              </div>
+            </form>
+          </section>
+
+          <!-- Input states -->
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Inputs</span>
+                <h2 class="card-title">States</h2>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              <div class="field">
+                <label class="field-label">Default</label>
+                <input class="input" placeholder="Type here">
+              </div>
+              <div class="field">
+                <label class="field-label">Filled</label>
+                <input class="input" value="hello@adminator.app">
+              </div>
+              <div class="field">
+                <label class="field-label">Disabled</label>
+                <input class="input" value="Read only" disabled>
+              </div>
+              <div class="field">
+                <label class="field-label">With icon</label>
+                <div class="input-icon">
+                  <span class="ico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+                  <input class="input" placeholder="Search...">
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label">Invalid</label>
+                <input class="input is-invalid" value="not-an-email">
+                <div class="field-error">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+                  Please enter a valid email address.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Selects + textarea -->
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Inputs</span>
+                <h2 class="card-title">Select & textarea</h2>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              <div class="field">
+                <label class="field-label">Country</label>
+                <select class="select">
+                  <option>Latvia</option>
+                  <option>United States</option>
+                  <option>Germany</option>
+                  <option>Japan</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label">Disabled select</label>
+                <select class="select" disabled>
+                  <option>Locked plan</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label">Description</label>
+                <textarea class="textarea" placeholder="Tell us a bit about your project..."></textarea>
+              </div>
+            </div>
+          </section>
+
+          <!-- Checkboxes + radios -->
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Choices</span>
+                <h2 class="card-title">Checkboxes & radios</h2>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <label class="check"><input type="checkbox" checked><span class="box"></span> Subscribe to changelog</label>
+              <label class="check"><input type="checkbox"><span class="box"></span> Get product tips weekly</label>
+              <label class="check"><input type="checkbox" disabled><span class="box"></span> SMS notifications (coming soon)</label>
+            </div>
+            <div class="section-h" style="margin: 18px 0 10px; font-size: 13px;">Plan</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <label class="check radio"><input type="radio" name="plan" checked><span class="box"></span> Starter — $0 / mo</label>
+              <label class="check radio"><input type="radio" name="plan"><span class="box"></span> Pro — $19 / mo</label>
+              <label class="check radio"><input type="radio" name="plan"><span class="box"></span> Team — $49 / mo</label>
+            </div>
+          </section>
+
+          <!-- Switches -->
+          <section class="col-6 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Choices</span>
+                <h2 class="card-title">Toggle switches</h2>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <label class="switch"><input type="checkbox" checked><span class="track"></span> Enable two-factor auth</label>
+              <label class="switch"><input type="checkbox"><span class="track"></span> Public profile</label>
+              <label class="switch"><input type="checkbox" checked><span class="track"></span> Auto-save drafts every 30 seconds</label>
+              <label class="switch"><input type="checkbox" disabled><span class="track"></span> Beta features (locked)</label>
+            </div>
+            <div class="alert info" style="margin-top: 18px;">
+              <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <div class="body">All changes save instantly — no submit button needed.</div>
+            </div>
+          </section>
+        </div>
+        </main>
+        <div data-shell-footer></div>
+      </div>
+    </div>
+  </body>
+</html>
