@@ -552,8 +552,34 @@ REPORT_AMBIGUOUS=0.40
 
 handle_report_am() {
   local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
+  local MEDIA_TYPE="${6:-}" MEDIA_PATH="${7:-}"
   local TGL_ISO IS_MULTI
   TGL_ISO=$(parse_tanggal_from_body "$BODY")
+
+  # ── Photo + geotag check (AM #REPORT wajib foto kunjungan dengan watermark coord) ──
+  local PHOTO_PATH="" PHOTO_GEOTAG=""
+  if [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ] && [ -f "$MEDIA_PATH" ]; then
+    # Run OCR to extract geotag from pixel watermark (Geo-Tagging Camera, GPS Map Camera).
+    PHOTO_GEOTAG=$(python3 "$BASE_DIR/scripts/check_photo_geotag.py" "$MEDIA_PATH" 2>/dev/null)
+    if [ -n "$PHOTO_GEOTAG" ]; then
+      PHOTO_PATH="$MEDIA_PATH"
+      local HAS_GT
+      HAS_GT=$(echo "$PHOTO_GEOTAG" | jq -r '.has_geotag' 2>/dev/null)
+      if [ "$HAS_GT" != "true" ]; then
+        wa_send "$GROUP_JID" "⚠️ Foto terdeteksi tapi *tidak ada geotag*. Pakai app Geo-Tagging Camera / GPS Map Camera supaya coord ke-burn di foto."
+        log "  #REPORT AM warn: photo without geotag from user=$USER_ID"
+      else
+        local LAT LON
+        LAT=$(echo "$PHOTO_GEOTAG" | jq -r '.lat')
+        LON=$(echo "$PHOTO_GEOTAG" | jq -r '.lon')
+        log "  #REPORT AM photo geotag: user=$USER_ID lat=$LAT lon=$LON"
+      fi
+    fi
+  else
+    wa_send "$GROUP_JID" "❌ Report AM wajib disertai *foto kunjungan dengan geotag*. Pakai app Geo-Tagging Camera / GPS Map Camera, lalu kirim ulang dengan #REPORT di caption."
+    log "  #REPORT AM rejected: no photo attached from user=$USER_ID"
+    return 1
+  fi
 
   # Detect Mode B (multi via "---" separator)
   IS_MULTI=0
@@ -702,14 +728,24 @@ next: ..."
     SAFE_HASIL=$(echo "$HASIL" | sed "s/'/''/g")
     SAFE_NEXT=$(echo "$NXT" | sed "s/'/''/g")
     local INSERTED_ID
+    # photo_path + photo_geotag JSONB (only when AM provided foto with watermark)
+    local PHOTO_SQL="NULL, NULL"
+    if [ -n "$PHOTO_PATH" ]; then
+      local SAFE_PHOTO_PATH SAFE_GEOTAG
+      SAFE_PHOTO_PATH=$(echo "$PHOTO_PATH" | sed "s/'/''/g")
+      SAFE_GEOTAG=$(echo "$PHOTO_GEOTAG" | sed "s/'/''/g")
+      PHOTO_SQL="'$SAFE_PHOTO_PATH', '$SAFE_GEOTAG'::jsonb"
+    fi
     INSERTED_ID=$($PSQL -c "
       INSERT INTO activity_log
         (user_id, customer_name, tanggal, hasil, next_action, source,
-         plan_id, is_unmatched, match_score, message_id)
+         plan_id, is_unmatched, match_score, message_id,
+         photo_path, photo_geotag)
       VALUES
         ($USER_ID, '$SAFE_CUST', '$TGL_ISO', '$SAFE_HASIL', '$SAFE_NEXT', 'WHATSAPP',
          $PLAN_ID, $IS_UNMATCHED, $MATCH_SCORE,
-         '${MSG_ID}__${i}')
+         '${MSG_ID}__${i}',
+         $PHOTO_SQL)
       ON CONFLICT (message_id) DO NOTHING
       RETURNING id;
     " 2>/dev/null | head -1)
@@ -989,10 +1025,11 @@ PYEOF
 
 handle_report() {
   local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
+  local MEDIA_TYPE="${6:-}" MEDIA_PATH="${7:-}"
   local ROLE
   ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1)
   if [ "$ROLE" = "AM" ]; then
-    handle_report_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"
+    handle_report_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MEDIA_TYPE" "$MEDIA_PATH"
   else
     handle_report_todo "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"
   fi
@@ -1054,6 +1091,8 @@ for D in "${DATES[@]}"; do
       SENDER_NAME=$(echo "$LINE" | jq -r '.sender_name // .sender' 2>/dev/null)
       GROUP_JID=$(echo "$LINE" | jq -r '.group_jid // empty' 2>/dev/null)
       BODY=$(echo "$LINE" | jq -r '.body // empty' 2>/dev/null)
+      MEDIA_TYPE=$(echo "$LINE" | jq -r '.media_type // empty' 2>/dev/null)
+      MEDIA_PATH=$(echo "$LINE" | jq -r '.media_path // empty' 2>/dev/null)
 
       [ -z "$MSG_ID" ] || [ -z "$SENDER" ] || [ -z "$GROUP_JID" ] && continue
 
@@ -1273,7 +1312,7 @@ Hubungi admin untuk mengaktifkan kembali."
           fi
           ;;
         report)
-          if handle_report "$USER_ID" "$DISPLAY_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"; then
+          if handle_report "$USER_ID" "$DISPLAY_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MEDIA_TYPE" "$MEDIA_PATH"; then
             FINAL_STATUS="DONE"
           else
             FINAL_STATUS="ERROR"
