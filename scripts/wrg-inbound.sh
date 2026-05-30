@@ -297,7 +297,9 @@ cust: ..."
       [[ "$LINE" =~ ^[[:space:]]*[0-9]+\|[[:space:]]*$ ]] && continue
       if [[ "$LINE" == *"|"*"|"* ]]; then
         IFS='|' read -r C T G <<<"$LINE"
-        C=$(echo "$C" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+        # Strip leading numbering "1. " / "2)" / "3.⁠ ⁠" (handles unicode invisible chars
+        # like U+2060 word-joiner that WhatsApp sometimes injects via auto-format).
+        C=$(echo "$C" | sed -E 's/^[[:space:]]*[0-9]+[.)][^A-Za-z]*//' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
         T=$(echo "$T" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
         G=$(echo "$G" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
         [ -z "$C" ] && continue
