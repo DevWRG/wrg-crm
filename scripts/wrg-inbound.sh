@@ -676,7 +676,7 @@ next: ..."
     return 1
   fi
 
-  local MATCHED=0 UNMATCHED=0 AMBIGUOUS=0 LINES_DISPLAY=""
+  local MATCHED=0 UNMATCHED=0 AMBIGUOUS=0 LINES_DISPLAY="" MISMATCH_WARNINGS=""
   for ((i=0; i<N; i++)); do
     local CUST HASIL NXT
     CUST=$(echo "$ENTRIES_JSON" | jq -r ".[$i].cust")
@@ -768,6 +768,8 @@ next: ..."
             VISIT_SQL=", visit_lat = $V_LAT, visit_lon = $V_LON, visit_timestamp = '$V_TS_ISO', visit_date_mismatch = $V_MISMATCH"
             if [ "$V_MISMATCH" = "TRUE" ]; then
               log "  #REPORT AM warn: photo date $TS_DATE mismatch plan tanggal $TGL_ISO (user=$USER_ID plan=$PLAN_ID)"
+              MISMATCH_WARNINGS="${MISMATCH_WARNINGS}
+  ⚠️ ${CUST}: foto $TS_DATE ≠ plan $TGL_ISO"
             fi
           else
             VISIT_SQL=", visit_lat = $V_LAT, visit_lon = $V_LON"
@@ -860,6 +862,14 @@ ${SHORT_MARK} ${CUST} → tidak ada di plan
     INLINE_BELUM=$(echo "$UNREPORTED_LIST" | sed 's/, /⚠️ /g')
     REPLY="${REPLY}
  Belum direport:  ⚠️ ${INLINE_BELUM}"
+  fi
+
+  # Append date-mismatch warnings (visit photo tanggal ≠ plan tanggal — sus
+  # backdate report). Tetap accept tapi flag visible di reply ke user + HOD.
+  if [ -n "$MISMATCH_WARNINGS" ]; then
+    REPLY="${REPLY}
+
+⚠️ *Tanggal foto mismatch — verifikasi visit:*${MISMATCH_WARNINGS}"
   fi
 
   wa_send "$GROUP_JID" "$REPLY"
