@@ -13,9 +13,21 @@ DST="$DST_DIR/dashboard.py"
 LABEL="ai.wrg-crm.dashboard"
 UID_NUM="$(id -u)"
 
+# Adminator frontend dist (built separately in ~/wrg-crm-dev/frontend/dist).
+# If the build is present, sync to runtime so dashboard.py serves it.
+FRONTEND_SRC="/Users/development/wrg-crm-dev/frontend/dist"
+FRONTEND_DST="$DST_DIR/frontend-dist"
+
 mkdir -p "$DST_DIR"
 cp "$SRC" "$DST"
 echo "Synced: $SRC -> $DST"
+
+if [ -d "$FRONTEND_SRC" ]; then
+  rsync -a --delete "$FRONTEND_SRC/" "$FRONTEND_DST/"
+  echo "Synced frontend: $FRONTEND_SRC -> $FRONTEND_DST"
+else
+  echo "INFO: $FRONTEND_SRC not present — dashboard.py akan fallback ke legacy inline INDEX_HTML"
+fi
 
 # Kick the launchd job so changes take effect immediately.
 if launchctl list | grep -q "$LABEL"; then
@@ -32,9 +44,10 @@ else
   exit 1
 fi
 
-# Quick health probe.
+# Quick health probe. Post-auth-deploy, /api/env requires session — so
+# probe / (login page or dashboard, both return 200 unauthenticated) instead.
 sleep 0.5
-if curl -fsS -o /dev/null http://127.0.0.1:8091/api/env; then
+if curl -fsS -o /dev/null http://127.0.0.1:8091/; then
   echo "OK: http://127.0.0.1:8091/ responding"
 else
   echo "WARN: http://127.0.0.1:8091/ not responding — check $DST_DIR/dashboard.err.log"
