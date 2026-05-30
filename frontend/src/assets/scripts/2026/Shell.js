@@ -23,8 +23,8 @@ export const NAV = [
   {
     label: 'WRG CRM',
     items: [
-      { key: 'dashboard', text: 'Dashboard', href: 'index.html',
-        icon: '<path d="M3 12 12 3l9 9"/><path d="M5 10v10h14V10"/>' },
+      { key: 'dashboard', text: 'Plan & Report', href: 'index.html',
+        icon: '<path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/>' },
     ],
   },
   {
