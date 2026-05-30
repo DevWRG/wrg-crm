@@ -361,15 +361,107 @@
               if (!r.ok) { $('drilldownBody').textContent = 'Error: ' + r.status; return; }
               const json = await r.json();
               const d = json.detail || {};
-              $('drilldownTitle').textContent = `${d.panggilan || ''} — ${d.nama || ''}`;
+              const u = d.user || {};
+              $('drilldownTitle').textContent = `${u.panggilan || ''} — ${u.nama || ''}`;
+
+              const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }) : '—';
+              const fmtTime = (iso) => iso ? new Date(iso).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '—';
+              const badge = (text, color) => `<span style="background:${color}1a; color:${color}; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600;">${escapeHtml(text)}</span>`;
+
+              // Info card
+              const info = `
+                <div style="background:#f8fafc; border-radius:8px; padding:14px; margin-bottom:16px; display:grid; grid-template-columns:repeat(4, 1fr); gap:8px 16px; font-size:13px;">
+                  <div><div style="color:#94a3b8; font-size:10px; text-transform:uppercase;">Role</div><strong>${escapeHtml(u.role || '—')}</strong></div>
+                  <div><div style="color:#94a3b8; font-size:10px; text-transform:uppercase;">Posisi</div><strong>${escapeHtml(u.posisi || '—')}</strong></div>
+                  <div><div style="color:#94a3b8; font-size:10px; text-transform:uppercase;">Cabang</div><strong>${escapeHtml(u.cabang || '—')}</strong></div>
+                  <div><div style="color:#94a3b8; font-size:10px; text-transform:uppercase;">WA</div><strong style="font-family:monospace;">${escapeHtml(u.wa_number || '—')}</strong></div>
+                </div>`;
+
+              // PLAN (AM mode — sales_plan rows)
+              const planRows = (d.plan || []);
+              const planHtml = planRows.length === 0
+                ? `<div style="color:#94a3b8; font-style:italic; padding:8px;">Tidak ada plan kunjungan AM pada periode ini.</div>`
+                : `<table style="width:100%; font-size:12px; border-collapse:collapse;">
+                    <thead><tr style="background:#f8fafc;">
+                      <th style="padding:6px 8px; text-align:left;">Tgl</th>
+                      <th style="padding:6px 8px; text-align:left;">Customer</th>
+                      <th style="padding:6px 8px; text-align:left;">Tujuan</th>
+                      <th style="padding:6px 8px; text-align:left;">Goal</th>
+                      <th style="padding:6px 8px; text-align:center;">Status</th>
+                      <th style="padding:6px 8px; text-align:left;">Hasil</th>
+                    </tr></thead><tbody>
+                    ${planRows.map((p) => `
+                      <tr style="border-top:1px solid #f1f5f9;">
+                        <td style="padding:6px 8px; white-space:nowrap;">${fmtDate(p.tanggal)}</td>
+                        <td style="padding:6px 8px;"><strong>${escapeHtml(p.customer_name)}</strong></td>
+                        <td style="padding:6px 8px;">${escapeHtml(p.tujuan || '—')}</td>
+                        <td style="padding:6px 8px; color:#64748b;">${escapeHtml(p.goal || '—')}</td>
+                        <td style="padding:6px 8px; text-align:center;">${p.reported ? badge('reported', '#16a34a') : (p.is_late_plan ? badge('late', '#dc2626') : badge('pending', '#94a3b8'))}</td>
+                        <td style="padding:6px 8px; font-size:11px; color:#475569;">${escapeHtml(p.hasil || '—')}</td>
+                      </tr>`).join('')}
+                  </tbody></table>`;
+
+              // TODO (non-AM mode — sales_todo rows)
+              const todoRows = (d.todo || []);
+              const todoHtml = todoRows.length === 0
+                ? `<div style="color:#94a3b8; font-style:italic; padding:8px;">Tidak ada todo list pada periode ini.</div>`
+                : todoRows.map((t) => {
+                    const items = Array.isArray(t.items) ? t.items : [];
+                    const reportItems = Array.isArray(t.report_data) ? t.report_data : [];
+                    const statusBadge = t.reported
+                      ? badge(`✓ reported ${reportItems.length}/${items.length}`, '#16a34a')
+                      : (t.is_late_plan ? badge('late, belum report', '#dc2626') : badge('pending', '#94a3b8'));
+                    // Match item to report by idx
+                    const reportByIdx = {};
+                    reportItems.forEach((r) => { reportByIdx[r.idx - 1] = r; });
+                    return `
+                      <div style="border:1px solid #e2e8f0; border-radius:8px; margin-bottom:10px;">
+                        <div style="background:#f8fafc; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0;">
+                          <div><strong>${fmtDate(t.tanggal)}</strong> <span style="color:#94a3b8; font-size:11px; margin-left:8px;">${items.length} item · submit ${fmtTime(t.submitted_at)}</span></div>
+                          ${statusBadge}
+                        </div>
+                        <ol style="margin:0; padding:8px 24px; font-size:12px;">
+                          ${items.map((it, i) => {
+                            const rep = reportByIdx[i];
+                            const matched = rep && rep.status === 'matched';
+                            const ambig = rep && rep.status === 'ambiguous';
+                            const unm = rep && rep.status === 'unmatched';
+                            return `<li style="margin:4px 0; ${rep ? '' : 'color:#94a3b8;'}">
+                              <span>${escapeHtml(it)}</span>
+                              ${rep ? `<div style="margin-left:0; padding:4px 8px; background:${matched ? '#f0fdf4' : (ambig ? '#fffbeb' : '#fef2f2')}; border-radius:4px; margin-top:2px; font-size:11px; color:#475569;">→ ${escapeHtml(rep.result || rep.task || '')} ${matched ? badge('matched','#16a34a') : (ambig ? badge('ambiguous','#d97706') : badge('baru','#dc2626'))}</div>` : ''}
+                            </li>`;
+                          }).join('')}
+                        </ol>
+                      </div>`;
+                  }).join('');
+
+              // Unmatched activity (AM mode extras)
+              const actRows = (d.unmatched_activity || []);
+              const actHtml = actRows.length === 0
+                ? ''
+                : `<h3 style="margin:16px 0 8px; font-size:13px; color:#dc2626;">Aktivitas Unmatched (di luar plan)</h3>
+                  <table style="width:100%; font-size:12px; border-collapse:collapse;">
+                    <thead><tr style="background:#fef2f2;">
+                      <th style="padding:6px 8px; text-align:left;">Tgl</th>
+                      <th style="padding:6px 8px; text-align:left;">Customer</th>
+                      <th style="padding:6px 8px; text-align:left;">Hasil</th>
+                      <th style="padding:6px 8px; text-align:left;">Next</th>
+                    </tr></thead><tbody>
+                    ${actRows.map((a) => `
+                      <tr style="border-top:1px solid #fee2e2;">
+                        <td style="padding:6px 8px;">${fmtDate(a.tanggal)}</td>
+                        <td style="padding:6px 8px;"><strong>${escapeHtml(a.customer_name)}</strong></td>
+                        <td style="padding:6px 8px;">${escapeHtml(a.hasil || '—')}</td>
+                        <td style="padding:6px 8px; color:#64748b;">${escapeHtml(a.next_action || '—')}</td>
+                      </tr>`).join('')}
+                  </tbody></table>`;
+
+              const isAM = u.role === 'AM';
               $('drilldownBody').innerHTML = `
-                <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px 16px; margin-bottom:16px;">
-                  <div><strong>Role:</strong> ${escapeHtml(d.role)}</div>
-                  <div><strong>Cabang:</strong> ${escapeHtml(d.cabang)}</div>
-                  <div><strong>Posisi:</strong> ${escapeHtml(d.posisi || '')}</div>
-                  <div><strong>WA:</strong> ${escapeHtml(d.wa_number || '')}</div>
-                </div>
-                <pre style="background:#f8fafc; padding:12px; border-radius:8px; overflow-x:auto; font-size:11px; max-height:50vh;">${escapeHtml(JSON.stringify(d, null, 2))}</pre>
+                ${info}
+                <h3 style="margin:16px 0 8px; font-size:13px;">${isAM ? `Plan Kunjungan (${planRows.length})` : `Todo List (${todoRows.length} hari)`}</h3>
+                ${isAM ? planHtml : todoHtml}
+                ${actHtml}
               `;
             };
 
