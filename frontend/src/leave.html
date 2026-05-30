@@ -40,31 +40,34 @@
                 <h2 class="card-title">Tambah ijin</h2>
               </div>
             </div>
-            <form id="leaveForm" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; align-items:end;">
-              <div>
-                <label style="font-size:11px; color:#64748b;">Karyawan</label>
-                <select id="fUser" required style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;"></select>
+            <form id="leaveForm" class="form-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:14px; align-items:end;">
+              <div class="field">
+                <label class="field-label" for="fUser">Karyawan <span class="req">*</span></label>
+                <select id="fUser" class="select" required></select>
               </div>
-              <div>
-                <label style="font-size:11px; color:#64748b;">Mulai</label>
-                <input type="date" id="fStart" required style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;">
+              <div class="field">
+                <label class="field-label" for="fStart">Mulai <span class="req">*</span></label>
+                <input type="date" id="fStart" class="input" required>
               </div>
-              <div>
-                <label style="font-size:11px; color:#64748b;">Sampai</label>
-                <input type="date" id="fEnd" required style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;">
+              <div class="field">
+                <label class="field-label" for="fEnd">Sampai</label>
+                <input type="date" id="fEnd" class="input">
               </div>
-              <div>
-                <label style="font-size:11px; color:#64748b;">Jenis</label>
-                <select id="fJenis" required style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;">
+              <div class="field">
+                <label class="field-label" for="fJenis">Jenis <span class="req">*</span></label>
+                <select id="fJenis" class="select" required>
                   <option value="sakit">sakit</option>
                   <option value="cuti">cuti</option>
                   <option value="ijin">ijin</option>
                 </select>
               </div>
-              <button type="submit" class="btn btn--primary">+ Add</button>
-              <div style="grid-column:1 / -1;">
-                <label style="font-size:11px; color:#64748b;">Keterangan</label>
-                <input type="text" id="fKet" placeholder="opsional (mis. 'flu', 'cuti tahunan')" style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;">
+              <div class="field">
+                <label class="field-label">&nbsp;</label>
+                <button type="submit" class="btn btn--primary" style="width:100%;">+ Add</button>
+              </div>
+              <div class="field" style="grid-column:1 / -1;">
+                <label class="field-label" for="fKet">Keterangan</label>
+                <input type="text" id="fKet" class="input" placeholder="opsional (mis. 'flu', 'cuti tahunan')">
               </div>
             </form>
           </section>

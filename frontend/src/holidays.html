@@ -39,16 +39,19 @@
                 <h2 class="card-title">Tambah libur</h2>
               </div>
             </div>
-            <form id="hForm" style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; align-items:end;">
-              <div>
-                <label style="font-size:11px; color:#64748b;">Tanggal</label>
-                <input type="date" id="fTgl" required style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;">
+            <form id="hForm" class="form-grid" style="display:grid; grid-template-columns:1fr 2fr auto; gap:14px; align-items:end;">
+              <div class="field">
+                <label class="field-label" for="fTgl">Tanggal <span class="req">*</span></label>
+                <input type="date" id="fTgl" class="input" required>
               </div>
-              <div>
-                <label style="font-size:11px; color:#64748b;">Keterangan</label>
-                <input type="text" id="fKet" required placeholder="mis. 'Idul Adha 1448H' atau 'Cuti bersama Lebaran'" style="width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:8px;">
+              <div class="field">
+                <label class="field-label" for="fKet">Keterangan <span class="req">*</span></label>
+                <input type="text" id="fKet" class="input" required placeholder="mis. 'Idul Adha 1448H' atau 'Cuti bersama Lebaran'">
               </div>
-              <button type="submit" class="btn btn--primary">+ Add / Update</button>
+              <div class="field">
+                <label class="field-label">&nbsp;</label>
+                <button type="submit" class="btn btn--primary">+ Add / Update</button>
+              </div>
             </form>
           </section>
 
