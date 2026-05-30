@@ -91,8 +91,8 @@
               const today = new Date();
               const dow = today.getDay() || 7; // Mon=1..Sun=7
               const mon = new Date(today); mon.setDate(today.getDate() - (dow - 1));
-              const fri = new Date(mon);   fri.setDate(mon.getDate() + 4);
-              const end = fri < today ? fri : today;
+              const sat = new Date(mon);   sat.setDate(mon.getDate() + 5);
+              const end = sat < today ? sat : today;
               const iso = (d) => d.toISOString().slice(0, 10);
               return [iso(mon), iso(end)];
             }
