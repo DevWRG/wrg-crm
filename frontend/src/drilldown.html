@@ -25,6 +25,7 @@
 
         <section class="hero">
           <div class="hero-text">
+            <a class="btn btn--ghost" href="/index.html" style="margin-bottom:10px; display:inline-block;">← Back</a>
             <span class="eyebrow" id="drillRoleTag">—</span>
             <h1 class="hero-title" id="drillTitle">Memuat…</h1>
             <p class="hero-sub" id="drillSub">—</p>
@@ -35,7 +36,6 @@
             <button class="btn btn--ghost" data-preset="week">Minggu ini</button>
             <button class="btn btn--ghost" data-preset="month">Bulan ini</button>
             <button class="btn btn--primary" id="btnApply">Apply</button>
-            <a class="btn btn--ghost" href="/index.html">← Back</a>
           </div>
         </section>
 
@@ -188,22 +188,39 @@
                     const reportByIdx = {};
                     reportItems.forEach((rr) => { reportByIdx[rr.idx - 1] = rr; });
                     return `
-                      <div style="border:1px solid #e2e8f0; border-radius:8px; margin-bottom:10px;">
-                        <div style="background:#f8fafc; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0;">
+                      <div style="border:1px solid #e2e8f0; border-radius:8px; margin-bottom:14px;">
+                        <div style="background:#f8fafc; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0;">
                           <div><strong>${fmtDate(t.tanggal)}</strong> <span style="color:#94a3b8; font-size:11px; margin-left:8px;">${items.length} item · submit ${fmtTime(t.submitted_at)}</span></div>
                           ${statusBadge}
                         </div>
-                        <ol style="margin:0; padding:8px 24px; font-size:12px;">
-                          ${items.map((it, i) => {
-                            const rep = reportByIdx[i];
-                            const matched = rep && rep.status === 'matched';
-                            const ambig = rep && rep.status === 'ambiguous';
-                            return `<li style="margin:4px 0; ${rep ? '' : 'color:#94a3b8;'}">
-                              <span>${escapeHtml(it)}</span>
-                              ${rep ? `<div style="padding:4px 8px; background:${matched ? '#f0fdf4' : (ambig ? '#fffbeb' : '#fef2f2')}; border-radius:4px; margin-top:2px; font-size:11px; color:#475569;">→ ${escapeHtml(rep.result || rep.task || '')} ${matched ? badge('matched','#16a34a') : (ambig ? badge('ambiguous','#d97706') : badge('baru','#dc2626'))}</div>` : ''}
-                            </li>`;
-                          }).join('')}
-                        </ol>
+                        <div style="overflow-x:auto;">
+                          <table style="width:100%; font-size:12px; border-collapse:collapse;">
+                            <thead><tr style="background:#fafbfc;">
+                              <th style="padding:8px 10px; text-align:left; width:32px;">#</th>
+                              <th style="padding:8px 10px; text-align:left;">Plan task</th>
+                              <th style="padding:8px 10px; text-align:left;">Report result</th>
+                              <th style="padding:8px 10px; text-align:center; width:110px;">Status</th>
+                            </tr></thead>
+                            <tbody>
+                            ${items.map((it, i) => {
+                              const rep = reportByIdx[i];
+                              const matched = rep && rep.status === 'matched';
+                              const ambig = rep && rep.status === 'ambiguous';
+                              const statusCol = !rep ? badge('—', '#94a3b8')
+                                : matched ? badge('matched', '#16a34a')
+                                : ambig   ? badge('ambiguous', '#d97706')
+                                          : badge('baru', '#dc2626');
+                              const repCell = rep ? escapeHtml(rep.result || rep.task || '') : '<span style="color:#94a3b8;">—</span>';
+                              return `<tr style="border-top:1px solid #f1f5f9;">
+                                <td style="padding:6px 10px; color:#94a3b8;">${i + 1}</td>
+                                <td style="padding:6px 10px;">${escapeHtml(it)}</td>
+                                <td style="padding:6px 10px; color:#475569;">${repCell}</td>
+                                <td style="padding:6px 10px; text-align:center;">${statusCol}</td>
+                              </tr>`;
+                            }).join('')}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>`;
                   }).join('');
               }
