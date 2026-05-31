@@ -106,13 +106,15 @@ function renderSection(section, activeKey) {
 function renderSidebar(activeKey) {
   const sections = NAV.map((s) => renderSection(s, activeKey)).join('');
   return `
+    <style>
+      [data-theme="dark"] .wrg-brand-light { display: none !important; }
+      [data-theme="dark"] .wrg-brand-dark  { display: block !important; }
+      [data-theme="light"] .wrg-brand-dark { display: none !important; }
+    </style>
     <aside class="d-sidebar">
-      <div class="brand">
-        <div class="brand-logo">${BRAND_LOGO}</div>
-        <div class="brand-text">
-          <div class="brand-name">Adminator</div>
-          <div class="brand-tag">v4.1.5 · preview</div>
-        </div>
+      <div class="brand" style="padding:12px 16px;">
+        <img class="wrg-brand-light" src="assets/static/images/wrg/logo-light.png" alt="Wahana LifeLine" style="max-width:160px; max-height:48px; object-fit:contain;">
+        <img class="wrg-brand-dark"  src="assets/static/images/wrg/logo-dark.png"  alt="Wahana LifeLine" style="max-width:160px; max-height:48px; object-fit:contain; display:none;">
       </div>
       ${sections}
       <div class="sidebar-footer">
