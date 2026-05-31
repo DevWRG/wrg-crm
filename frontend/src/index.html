@@ -355,7 +355,12 @@
               renderTable(tab);
             }
 
-            window.openDrilldown = async (userId) => {
+            window.openDrilldown = (userId) => {
+              const [d1, d2] = getRange();
+              location.href = `/drilldown.html?user_id=${userId}&from=${d1}&to=${d2}`;
+            };
+            // Legacy modal logic kept di bawah (unused — di-route ke drilldown.html sekarang)
+            window.__legacyDrilldown = async (userId) => {
               $('drilldownModal').style.display = 'flex';
               $('drilldownBody').innerHTML = 'Memuat…';
               const [d1, d2] = getRange();

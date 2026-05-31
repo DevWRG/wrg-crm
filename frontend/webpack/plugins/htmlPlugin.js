@@ -9,6 +9,7 @@ const titles = {
   'leave': 'WRG CRM · Manage Leave',
   'holidays': 'WRG CRM · Manage Holidays',
   'users': 'WRG CRM · Manage Users',
+  'drilldown': 'WRG CRM · Detail Plan & Report',
   // Adminator demo pages (kept for now as reference, may be removed later)
   'email': 'Adminator · Email',
   'calendar': 'Adminator · Calendar',
