@@ -15,36 +15,77 @@
         }
       })();
     </script>
+    <style>
+      [data-theme="dark"] .wrg-brand-light { display: none !important; }
+      [data-theme="dark"] .wrg-brand-dark  { display: block !important; }
+      [data-theme="light"] .wrg-brand-dark { display: none !important; }
+      .auth-brand .logo-img { max-width: 180px; max-height: 56px; object-fit: contain; }
+    </style>
   </head>
-  <body data-active="login" data-crumbs="" style="background:#f1f5f9; min-height:100vh; display:flex; align-items:center; justify-content:center;">
-    <div style="max-width:420px; width:90%; background:#fff; padding:40px; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,0.08);">
-      <div style="text-align:center; margin-bottom:24px;">
-        <div style="font-size:14px; color:#64748b; letter-spacing:0.05em; text-transform:uppercase;">WRG CRM</div>
-        <h1 style="margin:8px 0 0; font-size:28px;">Plan &amp; Report</h1>
-        <p style="margin:8px 0 0; color:#64748b; font-size:14px;">Login pakai panggilan / nama / nomor WA</p>
-      </div>
-
-      <form id="loginForm">
-        <div style="margin-bottom:16px;">
-          <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Username</label>
-          <input type="text" id="fIdent" required autocomplete="username" placeholder="Husni / boni / +6285…"
-            style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; font-size:14px; color:#1e293b; background:#fff;">
+  <body>
+    <div class="auth-shell">
+      <aside class="auth-aside">
+        <div class="auth-brand" style="display:flex; align-items:center; gap:10px;">
+          <img class="wrg-brand-light logo-img" src="assets/static/images/wrg/logo-light.png" alt="Wahana LifeLine">
+          <img class="wrg-brand-dark  logo-img" src="assets/static/images/wrg/logo-dark.png"  alt="Wahana LifeLine">
         </div>
-        <div style="margin-bottom:20px;">
-          <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Password</label>
-          <input type="password" id="fPw" required autocomplete="current-password"
-            style="width:100%; padding:12px; border:1px solid #e2e8f0; border-radius:10px; font-size:14px; color:#1e293b; background:#fff;">
+        <div class="auth-aside-body">
+          <span class="auth-aside-eyebrow">WRG CRM · Plan & Report</span>
+          <h1>Dashboard untuk plan &amp; report harian tim.</h1>
+          <p>Submit #PLAN pagi via WA, kirim #REPORT sore, lihat progress per orang/divisi/cabang/HOD area. Geotag verifikasi untuk AM sales visit.</p>
+          <div class="auth-quote">
+            "Sekali submit di WA, semua HOD bisa lihat real-time di dashboard. Lebih cepat, lebih akurat."
+            <div class="auth-quote-author">
+              <div class="av">WL</div>
+              <div>Wahana LifeLine · Operations Team</div>
+            </div>
+          </div>
         </div>
-        <button type="submit" id="btnLogin"
-          style="width:100%; padding:12px; background:#2563eb; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer;">
-          Login
-        </button>
-        <div id="loginErr" style="color:#dc2626; font-size:13px; margin-top:12px; min-height:20px;"></div>
-      </form>
+        <div class="auth-aside-footer">
+          <span>© 2026 Wahana LifeLine</span>
+          <span>Plan &amp; Report v5</span>
+        </div>
+      </aside>
+      <main class="auth-main">
+        <div class="auth-main-top">
+          <span style="font-size:12.5px; color: var(--t-muted);">WRG CRM</span>
+          <div class="switch-link">Lupa password? <a href="#" onclick="alert('Hubungi admin sistem untuk reset.'); return false;">Hubungi admin</a></div>
+        </div>
 
-      <div style="margin-top:24px; padding-top:20px; border-top:1px solid #f1f5f9; font-size:12px; color:#94a3b8; text-align:center;">
-        Belum punya password? Hubungi admin sistem.
-      </div>
+        <div class="auth-card">
+          <h2>Welcome back</h2>
+          <p class="sub">Login pakai panggilan, nama, atau nomor WA. Password awal: <code>&lt;panggilan_lowercase&gt;123</code> — ganti ASAP.</p>
+
+          <form id="loginForm" class="auth-form">
+            <div class="field">
+              <label class="field-label" for="fIdent">Username</label>
+              <div class="input-icon">
+                <span class="ico"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                <input id="fIdent" class="input" type="text" placeholder="Husni / boni / +6285…" autocomplete="username" required>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="fPw">Password</label>
+              <div class="input-icon">
+                <span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                <input id="fPw" class="input" type="password" placeholder="••••••••" autocomplete="current-password" required>
+              </div>
+            </div>
+
+            <button id="btnLogin" class="btn btn--primary auth-submit" type="submit">
+              Login
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </button>
+
+            <div id="loginErr" style="color: var(--danger); font-size:13px; margin-top:8px; min-height:18px;"></div>
+          </form>
+        </div>
+
+        <div class="auth-main-footer" style="font-size:11px; color: var(--t-light); margin-top:auto; padding-top:24px;">
+          Belum punya password? Hubungi admin sistem (Husni).
+        </div>
+      </main>
     </div>
 
     <script>
@@ -58,6 +99,7 @@
         $('loginForm').addEventListener('submit', async (e) => {
           e.preventDefault();
           $('btnLogin').disabled = true;
+          const original = $('btnLogin').innerHTML;
           $('btnLogin').textContent = 'Memproses…';
           $('loginErr').textContent = '';
           try {
@@ -70,7 +112,7 @@
             if (!r.ok) {
               $('loginErr').textContent = json.error || 'Login gagal.';
               $('btnLogin').disabled = false;
-              $('btnLogin').textContent = 'Login';
+              $('btnLogin').innerHTML = original;
               return;
             }
             const nextUrl = new URLSearchParams(location.search).get('next') || '/index.html';
@@ -78,7 +120,7 @@
           } catch (err) {
             $('loginErr').textContent = 'Network error: ' + err.message;
             $('btnLogin').disabled = false;
-            $('btnLogin').textContent = 'Login';
+            $('btnLogin').innerHTML = original;
           }
         });
       })();
