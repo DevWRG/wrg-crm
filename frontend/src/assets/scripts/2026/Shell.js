@@ -113,8 +113,8 @@ function renderSidebar(activeKey) {
     </style>
     <aside class="d-sidebar">
       <div class="brand" style="padding:12px 16px;">
-        <img class="wrg-brand-light" src="assets/static/images/wrg/logo-light.png" alt="Wahana LifeLine" style="max-width:160px; max-height:48px; object-fit:contain;">
-        <img class="wrg-brand-dark"  src="assets/static/images/wrg/logo-dark.png"  alt="Wahana LifeLine" style="max-width:160px; max-height:48px; object-fit:contain; display:none;">
+        <img class="wrg-brand-light" src="assets/static/images/wrg/logo-light.png" alt="Wahana LifeLine" style="max-width:120px; max-height:32px; object-fit:contain;">
+        <img class="wrg-brand-dark"  src="assets/static/images/wrg/logo-dark.png"  alt="Wahana LifeLine" style="max-width:120px; max-height:32px; object-fit:contain; display:none;">
       </div>
       ${sections}
       <div class="sidebar-footer">

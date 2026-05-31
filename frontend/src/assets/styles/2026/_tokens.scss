@@ -1,80 +1,127 @@
-/* ============ DESIGN TOKENS — 2026 ============ */
+/* ============ DESIGN TOKENS — 2026 (WRG Wahana LifeLine palette) ============
+ *
+ * WRG brand palette (logo-derived turquoise + coral + navy):
+ *   teal      #1EBFBF   primary turquoise
+ *   teal2     #19A8A8   darker turquoise (hover/active)
+ *   teal3     #E8F9F9   light turquoise bg
+ *   teal4     #C4EEEE   border turquoise
+ *   coral     #F06B5A   accent coral
+ *   coral2    #D9553F   darker coral
+ *   coral3    #FCE8E4   light coral bg
+ *   peach     #F8BDB0   soft accent
+ *   navy      #0E3D4D   dark teal for CTA + dark footer
+ *   offwhite  #F4FBFB   section bg
+ *   gray      #F0F6F6   form bg
+ *   text      #0E3D4D   body text
+ *   muted     #5F7A82   secondary text
+ *   line      #DCEDED   borders
+ * ============================================================ */
 
 :root[data-theme="light"] {
+  /* WRG palette */
+  --wrg-teal:      #1EBFBF;
+  --wrg-teal2:     #19A8A8;
+  --wrg-teal3:     #E8F9F9;
+  --wrg-teal4:     #C4EEEE;
+  --wrg-coral:     #F06B5A;
+  --wrg-coral2:    #D9553F;
+  --wrg-coral3:    #FCE8E4;
+  --wrg-peach:     #F8BDB0;
+  --wrg-navy:      #0E3D4D;
+  --wrg-offwhite:  #F4FBFB;
+  --wrg-gray:      #F0F6F6;
+
   /* Surfaces */
-  --bg-body:       #F0F4F8;
+  --bg-body:       #F4FBFB;       /* offwhite */
   --bg-card:       #FFFFFF;
   --bg-sidebar:    #FFFFFF;
-  --bg-hover:      #F8FAFC;
-  --bg-muted:      #F1F5F9;
+  --bg-hover:      #F0F6F6;       /* gray */
+  --bg-muted:      #E8F9F9;       /* teal3 */
 
   /* Text */
-  --t-base:        #1E293B;
-  --t-muted:       #64748B;
+  --t-base:        #0E3D4D;       /* navy */
+  --t-muted:       #5F7A82;
   --t-light:       #94A3B8;
   --t-inverse:     #FFFFFF;
 
   /* Borders */
-  --border:        #E4E8EF;
-  --border-soft:   #EEF1F5;
+  --border:        #DCEDED;       /* line */
+  --border-soft:   #C4EEEE;       /* teal4 */
 
-  /* Brand — blue */
-  --primary:       #2563EB;
-  --primary-light: #3B82F6;
-  --primary-dark:  #1D4ED8;
-  --primary-soft:  #EFF6FF;
-  --primary-ring:  rgba(37, 99, 235, 0.18);
+  /* Brand — WRG teal */
+  --primary:       #1EBFBF;
+  --primary-light: #19A8A8;
+  --primary-dark:  #0E3D4D;
+  --primary-soft:  #E8F9F9;
+  --primary-ring:  rgba(30, 191, 191, 0.20);
 
   /* Semantic */
   --success:       #10B981;
   --success-soft:  #ECFDF5;
   --warning:       #F59E0B;
   --warning-soft:  #FFFBEB;
-  --danger:        #EF4444;
-  --danger-soft:   #FEF2F2;
-  --info:          #0EA5E9;
-  --info-soft:     #F0F9FF;
+  --danger:        #F06B5A;       /* coral */
+  --danger-soft:   #FCE8E4;       /* coral3 */
+  --info:          #1EBFBF;       /* teal */
+  --info-soft:     #E8F9F9;
   --purple:        #8B5CF6;
   --purple-soft:   #F5F3FF;
   --pink:          #EC4899;
   --pink-soft:     #FDF2F8;
-  --teal:          #14B8A6;
-  --teal-soft:     #F0FDFA;
-  --orange:        #F97316;
-  --orange-soft:   #FFF7ED;
-  --shadow-sm:   0 1px 2px 0 rgb(15 23 42 / 0.04);
-  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
-  --shadow-lg:   0 10px 15px -3px rgb(15 23 42 / 0.08), 0 4px 6px -4px rgb(15 23 42 / 0.05);
-  --overlay: rgba(240, 244, 248, 0.72);
+  --teal:          #1EBFBF;
+  --teal-soft:     #E8F9F9;
+  --orange:        #F06B5A;
+  --orange-soft:   #FCE8E4;
+  --shadow-sm:   0 1px 2px 0 rgb(14 61 77 / 0.04);
+  --shadow-card: 0 1px 3px 0 rgb(14 61 77 / 0.06), 0 1px 2px -1px rgb(14 61 77 / 0.04);
+  --shadow-lg:   0 10px 15px -3px rgb(14 61 77 / 0.08), 0 4px 6px -4px rgb(14 61 77 / 0.05);
+  --overlay: rgba(244, 251, 251, 0.78);
 }
 
 :root[data-theme="dark"] {
-  --bg-body:       #0B1120;
-  --bg-card:       #141B2D;
-  --bg-sidebar:    #141B2D;
-  --bg-hover:      #1C2438;
-  --bg-muted:      #1A2237;
+  /* WRG palette — adjusted for dark mode */
+  --wrg-teal:      #2DD4D4;
+  --wrg-teal2:     #1EBFBF;
+  --wrg-teal3:     #0F2826;
+  --wrg-teal4:     #155F6A;
+  --wrg-coral:     #FF8576;
+  --wrg-coral2:    #F06B5A;
+  --wrg-coral3:    #2A1410;
+  --wrg-peach:     #F8BDB0;
+  --wrg-navy:      #0E3D4D;
+  --wrg-offwhite:  #0B1F26;
+  --wrg-gray:      #14242C;
+
+  --bg-body:       #0B1F26;
+  --bg-card:       #14242C;
+  --bg-sidebar:    #14242C;
+  --bg-hover:      #1A2F38;
+  --bg-muted:      #0F2826;
+
   --t-base:        #F1F5F9;
   --t-muted:       #94A3B8;
   --t-light:       #64748B;
-  --t-inverse:     #0B1120;
-  --border:        #222C42;
-  --border-soft:   #1A2237;
-  --primary:       #60A5FA;
-  --primary-light: #93C5FD;
-  --primary-dark:  #3B82F6;
-  --primary-soft:  #0F2847;
-  --primary-ring:  rgba(96, 165, 250, 0.24);
+  --t-inverse:     #0B1F26;
+
+  --border:        #1F3540;
+  --border-soft:   #163240;
+
+  --primary:       #2DD4D4;
+  --primary-light: #5FE0E0;
+  --primary-dark:  #1EBFBF;
+  --primary-soft:  #0F2826;
+  --primary-ring:  rgba(45, 212, 212, 0.28);
+
   --success:       #34D399;  --success-soft:  #0F2A20;
   --warning:       #FBBF24;  --warning-soft:  #2B1F08;
-  --danger:        #F87171;  --danger-soft:   #2B1414;
-  --info:          #38BDF8;  --info-soft:     #0D2232;
+  --danger:        #FF8576;  --danger-soft:   #2A1410;
+  --info:          #2DD4D4;  --info-soft:     #0F2826;
   --purple:        #A78BFA;  --purple-soft:   #1E1A2C;
   --pink:          #F472B6;  --pink-soft:     #2A1424;
-  --teal:          #2DD4BF;  --teal-soft:     #0E2826;
-  --orange:        #FB923C;  --orange-soft:   #2A1810;
+  --teal:          #2DD4D4;  --teal-soft:     #0F2826;
+  --orange:        #FF8576;  --orange-soft:   #2A1410;
   --shadow-sm:   0 1px 2px 0 rgb(0 0 0 / 0.4);
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.25);
   --shadow-lg:   0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
-  --overlay: rgba(11, 17, 32, 0.72);
+  --overlay: rgba(11, 31, 38, 0.78);
 }
