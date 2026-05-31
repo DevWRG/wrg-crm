@@ -39,7 +39,13 @@
                 <h2 class="card-title">Tambah libur</h2>
               </div>
             </div>
-            <form id="hForm" class="form-grid" style="display:grid; grid-template-columns:1fr 2fr auto; gap:14px; align-items:end;">
+            <style>
+              #hForm .field { display:flex; flex-direction:column; }
+              #hForm .field-label { min-height: 20px; line-height: 1.4; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+              #hForm .input, #hForm .btn { height: 40px; box-sizing: border-box; }
+              #hForm .req-spacer { opacity: 0; }
+            </style>
+            <form id="hForm" class="form-grid" style="display:grid; grid-template-columns:1fr 2fr auto; gap:14px; align-items:stretch;">
               <div class="field">
                 <label class="field-label" for="fTgl">Tanggal <span class="req">*</span></label>
                 <input type="date" id="fTgl" class="input" required>
@@ -49,7 +55,7 @@
                 <input type="text" id="fKet" class="input" required placeholder="mis. 'Idul Adha 1448H' atau 'Cuti bersama Lebaran'">
               </div>
               <div class="field">
-                <label class="field-label">&nbsp;</label>
+                <label class="field-label"><span class="req-spacer">&nbsp;</span></label>
                 <button type="submit" class="btn btn--primary">+ Add / Update</button>
               </div>
             </form>

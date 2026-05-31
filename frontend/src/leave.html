@@ -40,7 +40,13 @@
                 <h2 class="card-title">Tambah ijin</h2>
               </div>
             </div>
-            <form id="leaveForm" class="form-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:14px; align-items:end;">
+            <style>
+              #leaveForm .field { display:flex; flex-direction:column; }
+              #leaveForm .field-label { min-height: 20px; line-height: 1.4; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+              #leaveForm .input, #leaveForm .select, #leaveForm .btn { height: 40px; box-sizing: border-box; }
+              #leaveForm .req-spacer { opacity: 0; }
+            </style>
+            <form id="leaveForm" class="form-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:14px; align-items:stretch;">
               <div class="field">
                 <label class="field-label" for="fUser">Karyawan <span class="req">*</span></label>
                 <select id="fUser" class="select" required></select>
@@ -50,7 +56,7 @@
                 <input type="date" id="fStart" class="input" required>
               </div>
               <div class="field">
-                <label class="field-label" for="fEnd">Sampai</label>
+                <label class="field-label" for="fEnd">Sampai <span class="req req-spacer">*</span></label>
                 <input type="date" id="fEnd" class="input">
               </div>
               <div class="field">
@@ -62,8 +68,8 @@
                 </select>
               </div>
               <div class="field">
-                <label class="field-label">&nbsp;</label>
-                <button type="submit" class="btn btn--primary" style="width:100%;">+ Add</button>
+                <label class="field-label"><span class="req-spacer">&nbsp;</span></label>
+                <button type="submit" class="btn btn--primary">+ Add</button>
               </div>
               <div class="field" style="grid-column:1 / -1;">
                 <label class="field-label" for="fKet">Keterangan</label>
