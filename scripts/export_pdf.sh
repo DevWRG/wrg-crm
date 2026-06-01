@@ -82,8 +82,12 @@ if ! curl -fsS -o /dev/null --max-time 3 "$DASHBOARD_URL/login.html"; then
 fi
 
 # Service token: required sejak Phase 5 (dashboard auth-gated).
-# Set via env var WRG_SERVICE_TOKEN (juga di launchd plist dashboard supaya
-# proses dashboard tahu nilainya). Generate: `openssl rand -hex 32`.
+# Set via env var WRG_SERVICE_TOKEN (di launchd plist dashboard supaya
+# proses dashboard tahu nilainya), atau fallback ke .service_token file.
+# Generate: `openssl rand -hex 32`.
+if [[ -z "${WRG_SERVICE_TOKEN:-}" ]] && [[ -f "$BASE_DIR/.service_token" ]]; then
+  WRG_SERVICE_TOKEN=$(cat "$BASE_DIR/.service_token")
+fi
 if [[ -z "${WRG_SERVICE_TOKEN:-}" ]]; then
   echo "ERROR: WRG_SERVICE_TOKEN env var unset — required for PDF export auth" >&2
   echo "       Set di plist + cron env (sama dgn yg ada di dashboard plist)" >&2
