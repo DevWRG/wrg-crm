@@ -5,7 +5,7 @@ Audience: Account Manager (AM Sales)
 
 ---
 
-## 📅 #PLAN (Pagi, sebelum jam 08:30)
+## 📅 #PLAN (Pagi, sebelum jam 08:00)
 
 Kirim ke grup WRG di WhatsApp:
 
@@ -22,7 +22,7 @@ Kirim ke grup WRG di WhatsApp:
 - **Goal**: ringkas tujuan visit
 - Pisah pakai `|`
 
-**Late penalty**: kirim setelah 08:30 → late flag visible di dashboard HOD.
+**Late penalty**: kirim setelah 08:00 → late flag visible di dashboard HOD.
 
 ---
 
