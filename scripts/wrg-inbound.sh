@@ -552,14 +552,21 @@ REPORT_AMBIGUOUS=0.40
 
 handle_report_am() {
   local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
-  local MEDIA_TYPE="${6:-}" MEDIA_PATH="${7:-}"
+  local MEDIA_TYPE="${6:-}" MEDIA_PATH="${7:-}" SENDER_WA="${8:-}"
   local TGL_ISO IS_MULTI
   TGL_ISO=$(parse_tanggal_from_body "$BODY")
 
-  # ── Photo + geotag check (AM #REPORT wajib foto kunjungan dengan watermark coord) ──
+  # ── Photo + geotag check ────────────────────────────────────
+  # AM #REPORT now supports TWO modes:
+  #   (a) Photo-with-caption: 1 message = hashtag text + photo (single-customer
+  #       atau multi-customer dgn 1 foto kolektif).
+  #   (b) Cumulative: text-only hashtag msg dgn N customers, followed by
+  #       N image messages dgn caption "1.", "2.", "3." per customer.
+  # Mode (b) handled by handle_am_followup_photo when image arrives later;
+  # mode (a) processes photo here. Text-only with NO follow-up photos =
+  # accepted but flagged (visit_lat/lon remain NULL).
   local PHOTO_PATH="" PHOTO_GEOTAG=""
   if [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ] && [ -f "$MEDIA_PATH" ]; then
-    # Run OCR to extract geotag from pixel watermark (Geo-Tagging Camera, GPS Map Camera).
     PHOTO_GEOTAG=$(python3 "$BASE_DIR/scripts/check_photo_geotag.py" "$MEDIA_PATH" 2>/dev/null)
     if [ -n "$PHOTO_GEOTAG" ]; then
       PHOTO_PATH="$MEDIA_PATH"
@@ -576,9 +583,9 @@ handle_report_am() {
       fi
     fi
   else
-    wa_send "$GROUP_JID" "❌ Report AM wajib disertai *foto kunjungan dengan geotag*. Pakai app Geo-Tagging Camera / GPS Map Camera, lalu kirim ulang dengan #REPORT di caption."
-    log "  #REPORT AM rejected: no photo attached from user=$USER_ID"
-    return 1
+    # Text-only #REPORT — cumulative mode. User akan kirim foto per customer
+    # dgn caption "1.", "2.", "3." sebagai follow-up.
+    log "  #REPORT AM text-only: user=$USER_ID — awaiting follow-up photos per customer"
   fi
 
   # Detect Mode B (multi via "---" separator)
@@ -683,9 +690,11 @@ next: ..."
   fi
 
   local MATCHED=0 UNMATCHED=0 AMBIGUOUS=0 LINES_DISPLAY="" MISMATCH_WARNINGS=""
+  local AM_CUST_NAMES=""  # untuk warning "foto belum ada" list
   for ((i=0; i<N; i++)); do
     local CUST HASIL NXT
     CUST=$(echo "$ENTRIES_JSON" | jq -r ".[$i].cust")
+    AM_CUST_NAMES="${AM_CUST_NAMES}${AM_CUST_NAMES:+, }${CUST}"
     HASIL=$(echo "$ENTRIES_JSON" | jq -r ".[$i].hasil")
     NXT=$(echo "$ENTRIES_JSON" | jq -r ".[$i].next")
     local SAFE_CUST
@@ -742,16 +751,18 @@ next: ..."
       SAFE_GEOTAG=$(echo "$PHOTO_GEOTAG" | sed "s/'/''/g")
       PHOTO_SQL="'$SAFE_PHOTO_PATH', '$SAFE_GEOTAG'::jsonb"
     fi
+    local SAFE_WA
+    SAFE_WA=$(echo "$SENDER_WA" | sed "s/'/''/g")
     INSERTED_ID=$($PSQL -c "
       INSERT INTO activity_log
         (user_id, customer_name, tanggal, hasil, next_action, source,
          plan_id, is_unmatched, match_score, message_id,
-         photo_path, photo_geotag)
+         photo_path, photo_geotag, sender_wa_number)
       VALUES
         ($USER_ID, '$SAFE_CUST', '$TGL_ISO', '$SAFE_HASIL', '$SAFE_NEXT', 'WHATSAPP',
          $PLAN_ID, $IS_UNMATCHED, $MATCH_SCORE,
          '${MSG_ID}__${i}',
-         $PHOTO_SQL)
+         $PHOTO_SQL, '$SAFE_WA')
       ON CONFLICT (message_id) DO NOTHING
       RETURNING id;
     " 2>/dev/null | head -1)
@@ -878,14 +889,28 @@ ${SHORT_MARK} ${CUST} → tidak ada di plan
 ⚠️ *Tanggal foto mismatch — verifikasi visit:*${MISMATCH_WARNINGS}"
   fi
 
-  # Multi-customer + only 1 photo = sebagian customers gak ada visit
-  # documentation. Photo cuma di-apply ke semua customer dengan SAMA
-  # (visit_lat/lon/timestamp identik). Warn AM supaya per-customer kirim
-  # #REPORT terpisah (1 foto per visit).
-  if [ -n "$PHOTO_PATH" ] && [ "$N" -gt 1 ]; then
+  # Photo coverage warning:
+  #   (a) Text-only hashtag → semua customer awaiting follow-up foto.
+  #   (b) Photo on hashtag msg + multi customer → cuma customer #1 ter-cover,
+  #       sisa awaiting follow-up.
+  if [ -z "$PHOTO_PATH" ] && [ "$N" -gt 0 ]; then
     REPLY="${REPLY}
 
-⚠️ *Foto kunjungan cuma 1, tapi report ${N} customer.* Idealnya 1 foto per visit. Kirim #REPORT terpisah per customer + foto masing-masing biar visit ke-verify per lokasi."
+⚠️ *Foto visit belum ada (${N} customer):*
+${AM_CUST_NAMES}
+
+Kirim foto Geo-Tagging Camera per customer dgn caption \`Nama Customer\` — fuzzy match auto-pair ke pending."
+    log "  #REPORT AM warn: text-only, $N customer awaiting photos (user=$USER_ID)"
+  elif [ -n "$PHOTO_PATH" ] && [ "$N" -gt 1 ]; then
+    # First customer covered, list the rest
+    local REST_LIST
+    REST_LIST=$(printf "%s" "$AM_CUST_NAMES" | python3 -c "import sys; print(', '.join(sys.stdin.read().split(', ')[1:]))" 2>/dev/null)
+    REPLY="${REPLY}
+
+⚠️ *Foto cuma 1, tapi report ${N} customer.* Foto di-apply ke customer #1. Sisa $((N - 1)) belum ada foto:
+${REST_LIST}
+
+Kirim foto Geo-Tagging Camera dgn caption nama customer untuk yg belum."
     log "  #REPORT AM warn: single photo for $N customers (user=$USER_ID)"
   fi
 
@@ -1075,14 +1100,157 @@ PYEOF
 
 handle_report() {
   local USER_ID="$1" SENDER_NAME="$2" GROUP_JID="$3" BODY="$4" MSG_ID="$5"
-  local MEDIA_TYPE="${6:-}" MEDIA_PATH="${7:-}"
+  local MEDIA_TYPE="${6:-}" MEDIA_PATH="${7:-}" SENDER_WA="${8:-}"
   local ROLE
   ROLE=$($PSQL -c "SELECT role FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1)
   if [ "$ROLE" = "AM" ]; then
-    handle_report_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MEDIA_TYPE" "$MEDIA_PATH"
+    handle_report_am "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MEDIA_TYPE" "$MEDIA_PATH" "$SENDER_WA"
   else
     handle_report_todo "$USER_ID" "$SENDER_NAME" "$GROUP_JID" "$BODY" "$MSG_ID"
   fi
+}
+
+handle_am_followup_photo() {
+  # Image message tanpa hashtag dengan caption seperti "1. RS Foo", "Kalianget",
+  # atau "3.". Pairing strategy (priority):
+  #   1. Caption text → fuzzy match (pg_trgm similarity) ke customer_name dari
+  #      activity_log rows sender hari ini. Min score 0.30. Pick highest.
+  #   2. Fallback: number di caption → ROW_NUMBER posisi di activity_log
+  #      (urutan insert = urutan di body report).
+  # Ini handle case user pakai number sebagai sequence counter dgn name sebagai
+  # identifier, OR pakai number-only caption tanpa nama.
+  local GROUP_JID="$1" BODY="$2" MEDIA_PATH="$3" SENDER_WA="$4"
+  local TGL_ISO CAPTION_TEXT IDX
+  TGL_ISO=$(date '+%Y-%m-%d')
+
+  # Extract caption components: number (optional) + text-after-number
+  CAPTION_TEXT=$(echo "$BODY" | head -1)
+  IDX=$(echo "$CAPTION_TEXT" | python3 -c "
+import sys, re
+line = sys.stdin.readline()
+m = re.match(r'^\s*(\d+)[.):\s\-]', line)
+print(m.group(1) if m else '')
+" 2>/dev/null)
+  # Strip leading number+punct to get name part for fuzzy match
+  local NAME_PART
+  NAME_PART=$(echo "$CAPTION_TEXT" | python3 -c "
+import sys, re
+line = sys.stdin.readline().strip()
+# Remove leading 'N.', 'N)', 'N -', 'N:' etc
+line = re.sub(r'^\s*\d+[.):\s\-]+', '', line)
+print(line.strip())
+" 2>/dev/null)
+
+  # Reject jika tidak ada number AND tidak ada name part (bukan follow-up valid)
+  if [ -z "$IDX" ] && [ -z "$NAME_PART" ]; then
+    return 1
+  fi
+
+  local TOTAL_ROWS
+  TOTAL_ROWS=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO';" 2>/dev/null | head -1)
+  if [ -z "$TOTAL_ROWS" ] || [ "$TOTAL_ROWS" = "0" ]; then
+    return 1  # No pending #REPORT from this sender today
+  fi
+
+  # Try fuzzy match by name first (priority over index)
+  local TARGET_ROW=""
+  if [ -n "$NAME_PART" ]; then
+    local SAFE_NAME
+    SAFE_NAME=$(echo "$NAME_PART" | sed "s/'/''/g")
+    TARGET_ROW=$($PSQL -c "
+      SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || (CASE WHEN photo_path IS NOT NULL THEN 't' ELSE 'f' END) || E'\t' || ROUND(similarity(customer_name, '$SAFE_NAME')::numeric, 2)
+      FROM activity_log
+      WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+        AND similarity(customer_name, '$SAFE_NAME') >= 0.30
+      ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
+      LIMIT 1;
+    " 2>/dev/null | head -1)
+  fi
+
+  # Fallback: ROW_NUMBER by index if name match failed
+  if [ -z "$TARGET_ROW" ] && [ -n "$IDX" ]; then
+    TARGET_ROW=$($PSQL -c "
+      SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || (CASE WHEN photo_path IS NOT NULL THEN 't' ELSE 'f' END) || E'\t' || '0.00'
+      FROM (
+        SELECT *, ROW_NUMBER() OVER (ORDER BY id ASC) AS rn
+        FROM activity_log
+        WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+      ) t WHERE rn = $IDX;
+    " 2>/dev/null | head -1)
+  fi
+
+  if [ -z "$TARGET_ROW" ]; then
+    wa_send "$GROUP_JID" "⚠️ Caption '${CAPTION_TEXT}' gak match ke customer manapun di report (${TOTAL_ROWS} customers). Pakai caption \`N. Nama Customer\` (mis. \`3. Rsud Sumenep\`)."
+    log "  #REPORT AM photo-followup: no match for caption='$CAPTION_TEXT' (total=$TOTAL_ROWS wa=$SENDER_WA)"
+    return 1
+  fi
+
+  local ACT_ID CUST_NAME PLAN_ID USER_ID ALREADY_HAS_PHOTO MATCH_SIM
+  IFS=$'\t' read -r ACT_ID CUST_NAME PLAN_ID USER_ID ALREADY_HAS_PHOTO MATCH_SIM <<<"$TARGET_ROW"
+  if [ "$ALREADY_HAS_PHOTO" = "t" ]; then
+    log "  #REPORT AM photo-followup: overwriting existing photo for cust='$CUST_NAME'"
+  fi
+  log "  #REPORT AM photo-followup: matched '$NAME_PART' → cust='$CUST_NAME' (sim=$MATCH_SIM)"
+
+  local PHOTO_GEOTAG HAS_GT
+  PHOTO_GEOTAG=$(python3 "$BASE_DIR/scripts/check_photo_geotag.py" "$MEDIA_PATH" 2>/dev/null)
+  if [ -z "$PHOTO_GEOTAG" ]; then
+    wa_send "$GROUP_JID" "⚠️ Foto customer #$IDX ($CUST_NAME): gagal OCR. Pastikan watermark Geo-Tagging Camera kebaca."
+    log "  #REPORT AM photo-followup: OCR failed idx=$IDX cust='$CUST_NAME'"
+    return 1
+  fi
+  HAS_GT=$(echo "$PHOTO_GEOTAG" | jq -r '.has_geotag' 2>/dev/null)
+
+  local SAFE_PATH SAFE_GEOTAG
+  SAFE_PATH=$(echo "$MEDIA_PATH" | sed "s/'/''/g")
+  # Re-serialize via jq -c (compact, ensures newlines + control chars escaped)
+  SAFE_GEOTAG=$(echo "$PHOTO_GEOTAG" | jq -c . 2>/dev/null | sed "s/'/''/g")
+  [ -z "$SAFE_GEOTAG" ] && SAFE_GEOTAG="$(echo "$PHOTO_GEOTAG" | tr -d '\n' | sed "s/'/''/g")"
+  $PSQL -c "UPDATE activity_log SET photo_path = '$SAFE_PATH', photo_geotag = '$SAFE_GEOTAG'::jsonb WHERE id = $ACT_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+
+  if [ "$HAS_GT" != "true" ]; then
+    wa_send "$GROUP_JID" "⚠️ Foto customer #$IDX ($CUST_NAME) tersimpan, tapi *tidak ada geotag*. Pakai Geo-Tagging Camera supaya coord ke-burn di pixel."
+    log "  #REPORT AM photo-followup: no geotag idx=$IDX cust='$CUST_NAME'"
+    return 0
+  fi
+
+  local V_LAT V_LON V_TS_ISO V_MISMATCH TS_DATE
+  V_LAT=$(echo "$PHOTO_GEOTAG" | jq -r '.lat // empty')
+  V_LON=$(echo "$PHOTO_GEOTAG" | jq -r '.lon // empty')
+  V_TS_ISO=$(echo "$PHOTO_GEOTAG" | jq -r '.timestamp_iso // empty')
+  V_MISMATCH="FALSE"
+  TS_DATE=""
+  if [ -n "$V_TS_ISO" ]; then
+    TS_DATE=$(echo "$V_TS_ISO" | cut -d' ' -f1)
+    [ "$TS_DATE" != "$TGL_ISO" ] && V_MISMATCH="TRUE"
+  fi
+
+  if [ "$PLAN_ID" != "NULL" ] && [ -n "$V_LAT" ] && [ -n "$V_LON" ]; then
+    local VISIT_SQL="visit_lat = $V_LAT, visit_lon = $V_LON, visit_date_mismatch = $V_MISMATCH"
+    [ -n "$V_TS_ISO" ] && VISIT_SQL="$VISIT_SQL, visit_timestamp = '$V_TS_ISO'"
+    $PSQL -c "UPDATE sales_plan SET $VISIT_SQL WHERE id = $PLAN_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
+  fi
+
+  log "  #REPORT AM photo-followup ok: user=$USER_ID cust='$CUST_NAME' lat=$V_LAT lon=$V_LON mismatch=$V_MISMATCH"
+
+  # Count + list remaining pending photos for this sender (after current update)
+  local REMAINING REMAINING_LIST
+  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
+  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
+
+  local FOLLOWUP_REPLY="✅ Foto ${CUST_NAME} tersimpan"
+  if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
+    FOLLOWUP_REPLY="${FOLLOWUP_REPLY}. Sisa ${REMAINING} customer belum ada foto:
+⚠️ ${REMAINING_LIST}"
+  else
+    FOLLOWUP_REPLY="${FOLLOWUP_REPLY}. ✅ Semua foto visit lengkap."
+  fi
+  if [ "$V_MISMATCH" = "TRUE" ]; then
+    FOLLOWUP_REPLY="${FOLLOWUP_REPLY}
+⚠️ Tanggal foto $TS_DATE ≠ plan $TGL_ISO — pastikan foto diambil hari ini."
+  fi
+  wa_send "$GROUP_JID" "$FOLLOWUP_REPLY"
+  return 0
 }
 
 handle_leads() {
@@ -1191,6 +1359,18 @@ for D in "${DATES[@]}"; do
       if [[ "$BODY" =~ \#[[:space:]]*([Pp][Ll][Aa][Nn]|[Rr][Ee][Pp][Oo][Rr][Tt]|[Ll][Ee][Aa][Dd][Ss]|[Uu][Pp][Dd][Aa][Tt][Ee]) ]]; then
         HASHTAG=$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
       else
+        # Non-hashtag check: image dgn caption numbered ("1.", "2.") dari sender
+        # yang punya pending AM activity hari ini → photo-followup pairing.
+        if [ -n "$MEDIA_PATH" ] && [ -f "$MEDIA_PATH" ] && \
+           [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ] && \
+           echo "$BODY" | head -1 | grep -qE '^[[:space:]]*[0-9]+[.):]'; then
+          if handle_am_followup_photo "$GROUP_JID" "$BODY" "$MEDIA_PATH" "$WA_NUM"; then
+            $PSQL -c "INSERT INTO processed_message (message_id, status) VALUES ('$MSG_ID', 'PHOTO_FOLLOWUP') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
+            PROCESSED=$((PROCESSED + 1))
+            HASHTAG_HITS=$((HASHTAG_HITS + 1))
+            continue
+          fi
+        fi
         # Non-hashtag message: still update last_active_group (if sender resolvable)
         if [ "$SENDER_IS_GROUP" = "0" ]; then
           $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE wa_number = '$WA_NUM';" >/dev/null 2>>"$LOG_DIR/daily.log"
@@ -1362,7 +1542,7 @@ Hubungi admin untuk mengaktifkan kembali."
           fi
           ;;
         report)
-          if handle_report "$USER_ID" "$DISPLAY_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MEDIA_TYPE" "$MEDIA_PATH"; then
+          if handle_report "$USER_ID" "$DISPLAY_NAME" "$GROUP_JID" "$BODY" "$MSG_ID" "$MEDIA_TYPE" "$MEDIA_PATH" "$WA_NUM"; then
             FINAL_STATUS="DONE"
           else
             FINAL_STATUS="ERROR"

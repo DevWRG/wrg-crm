@@ -89,20 +89,45 @@ def main():
         result["raw_ocr"] = text
 
         # Coords — try multiple watermark formats:
-        # A) "Lat -7.282302 Long 112.754749"  (Geo-Tagging Camera)
-        # B) "© -7,2822° 112,7548°"            (alt camera, comma decimal + °)
-        # C) "-7.2822, 112.7548"               (plain coord pair)
-        m = re.search(r'Lat\s*(-?\d+[.,]\d+)\s*Long\s*(-?\d+[.,]\d+)', text, re.I)
+        # A) "Lat -7.282302 Long 112.754749"   (Geo-Tagging Camera, EN)
+        # A') "Lat -7008929 Long 112507992"    (same fmt tapi OCR drop dot →
+        #                                       recover via Indonesia bounds)
+        # B) "-7,0090°, 112,5080°"             (alt camera, comma decimal + °)
+        # C) "-7.2822, 112.7548"               (plain coord pair, no degree)
+        def repair_coord(raw, kind):
+            """Recover decimal point if OCR dropped it. kind='lat' or 'lon'.
+            Indonesia: lat -11..6 (1-2 digits before .), lon 95..141 (3 before)."""
+            s = raw.replace(',', '.')
+            if '.' in s:
+                return float(s)
+            sign = -1 if s.startswith('-') else 1
+            digits = s.lstrip('-')
+            if not digits.isdigit():
+                raise ValueError(f"bad digits: {raw}")
+            if kind == 'lat':
+                # Try 1 or 2-digit integer part
+                for split in (1, 2):
+                    if len(digits) > split:
+                        candidate = sign * float(f"{digits[:split]}.{digits[split:]}")
+                        if -11 <= candidate <= 6:
+                            return candidate
+            else:  # lon
+                for split in (2, 3):
+                    if len(digits) > split:
+                        candidate = sign * float(f"{digits[:split]}.{digits[split:]}")
+                        if 95 <= candidate <= 141:
+                            return candidate
+            raise ValueError(f"can't repair: {raw}")
+
+        m = re.search(r'Lat\s*(-?[\d.,]+)\s+Long\s*(-?[\d.,]+)', text, re.I)
         if not m:
-            m = re.search(r'(-?\d+[.,]\d{3,})\s*°\s*(-?\d+[.,]\d{3,})\s*°', text)
+            m = re.search(r'(-?\d+[.,]\d{3,})\s*°[°,\s]+(-?\d+[.,]\d{3,})\s*°?', text)
         if not m:
-            # Pair like "-7.282302, 112.754749" (no degree symbol)
             m = re.search(r'(-?\d+[.,]\d{4,})[\s,]+(-?\d+[.,]\d{4,})', text)
         if m:
             try:
-                lat = float(m.group(1).replace(',', '.'))
-                lon = float(m.group(2).replace(',', '.'))
-                # Sanity check: Indonesia bounds (-11 to 6 lat, 95 to 141 lng)
+                lat = repair_coord(m.group(1), 'lat')
+                lon = repair_coord(m.group(2), 'lon')
                 if -11 <= lat <= 6 and 95 <= lon <= 141:
                     result["has_geotag"] = True
                     result["lat"] = lat
