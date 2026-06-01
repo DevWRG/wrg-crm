@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hmac
 import http.server
 import json
 import os
@@ -145,6 +146,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return json_response(self, {"error": "not authenticated"}, 401)
                 user["is_admin"] = is_admin_role(user.get("role", ""))
                 return json_response(self, {"user": user})
+
+            # /api/auth/service-login — token-based one-shot login untuk cron + PDF export.
+            # Validates `?token=XXX` against WRG_SERVICE_TOKEN env var (constant-time).
+            # If valid, mints session for service user "Husni" and 302-redirects to ?next=...
+            # (Chrome stores Set-Cookie + follows redirect; subsequent fetches carry session.)
+            if path == "/api/auth/service-login":
+                tok = (qs.get("token") or [""])[0]
+                nxt = (qs.get("next") or ["/"])[0]
+                expected = os.environ.get("WRG_SERVICE_TOKEN", "")
+                if not expected:
+                    return json_response(self, {"error": "service login disabled (WRG_SERVICE_TOKEN unset)"}, 503)
+                if not tok or not hmac.compare_digest(tok, expected):
+                    return json_response(self, {"error": "invalid service token"}, 401)
+                row = psql_json(
+                    "SELECT row_to_json(t) FROM (SELECT id, role FROM master_user "
+                    "WHERE LOWER(panggilan)='husni' AND aktif LIMIT 1) t;",
+                    env=env_qs,
+                )
+                if not row:
+                    return json_response(self, {"error": "service user 'Husni' not found"}, 500)
+                ua = self.headers.get("User-Agent", "service-login")
+                ip = self.client_address[0] if self.client_address else ""
+                session_tok = create_session(row["id"], env_qs, ua, ip)
+                self.send_response(302)
+                self.send_header("Set-Cookie", f"{SESSION_COOKIE}={session_tok}; HttpOnly; Path=/; Max-Age=3600; SameSite=Lax")
+                self.send_header("Location", nxt)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
 
             # Auth guard for /api/* — except auth endpoints.
             if path.startswith("/api/") and not path.startswith("/api/auth/"):

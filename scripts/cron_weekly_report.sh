@@ -57,8 +57,30 @@ fi
 SIZE_KB=$(( $(stat -f%z "$OUT_FILE") / 1024 ))
 log "  weekly_report: PDF created $OUT_FILE (${SIZE_KB}KB)"
 
+# ── Auth: service-token login (dashboard /api/* require session sejak Phase 5) ──
+# Token disimpan di env var WRG_SERVICE_TOKEN (juga di-set di dashboard plist).
+# Generate via `openssl rand -hex 32`, simpan di .service_token (chmod 600) +
+# inject via launchd plist EnvironmentVariables.
+if [[ -z "${WRG_SERVICE_TOKEN:-}" ]] && [[ -f "$BASE_DIR/.service_token" ]]; then
+  WRG_SERVICE_TOKEN=$(cat "$BASE_DIR/.service_token")
+fi
+if [[ -z "${WRG_SERVICE_TOKEN:-}" ]]; then
+  log "  weekly_report: ERROR WRG_SERVICE_TOKEN unset (cek plist + .service_token)"
+  wa_send "$ADMIN_NUMBER" "⚠️ WRG Weekly Report: WRG_SERVICE_TOKEN tidak ter-set di cron env."
+  exit 1
+fi
+COOKIE_JAR=$(mktemp -t wrg-cron-cookie)
+trap 'rm -f "$COOKIE_JAR"' EXIT
+if ! curl -fsS --max-time 10 -L -c "$COOKIE_JAR" \
+  "http://127.0.0.1:8091/api/auth/service-login?token=${WRG_SERVICE_TOKEN}&next=/api/auth/me" \
+  -o /dev/null 2>/dev/null; then
+  log "  weekly_report: ERROR service-login failed — dashboard auth issue"
+  wa_send "$ADMIN_NUMBER" "⚠️ WRG Weekly Report: service-login dashboard gagal."
+  exit 1
+fi
+
 # ── Ambil ringkasan KPI dari dashboard API ───────────────────
-SUMMARY_JSON=$(curl -fsS --max-time 10 \
+SUMMARY_JSON=$(curl -fsS --max-time 10 -b "$COOKIE_JAR" \
   "http://127.0.0.1:8091/api/summary?from=${LAST_MON}&to=${LAST_FRI}" 2>/dev/null || echo '{}')
 
 # Parse fields safely via python (stdlib JSON)
@@ -84,7 +106,7 @@ else
 fi
 
 # ── Top 3 cabang by % selesai (min 5 plan biar bukan outlier) ─
-TOP_CABANG=$(curl -fsS --max-time 10 \
+TOP_CABANG=$(curl -fsS --max-time 10 -b "$COOKIE_JAR" \
   "http://127.0.0.1:8091/api/per-cabang?from=${LAST_MON}&to=${LAST_FRI}" 2>/dev/null | \
   python3 -c "
 import sys, json

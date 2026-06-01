@@ -74,16 +74,29 @@ if [[ -z "$OUTPUT" ]]; then
   OUTPUT="$EXPORT_DIR/wrg-report-${FROM}_${TO}${ENV_SUFFIX}-${STAMP}.pdf"
 fi
 
-# Quick sanity: dashboard responding?
-if ! curl -fsS -o /dev/null --max-time 3 "$DASHBOARD_URL/api/env"; then
+# Quick sanity: dashboard responding? (login.html is public, no auth needed)
+if ! curl -fsS -o /dev/null --max-time 3 "$DASHBOARD_URL/login.html"; then
   echo "ERROR: dashboard tidak respond di $DASHBOARD_URL" >&2
   echo "       launchctl list | grep wrg-crm  → cek status" >&2
   exit 1
 fi
 
-# Build full URL with export=pdf + env override + date range
-URL="${DASHBOARD_URL}/?export=pdf"
-[[ -n "$ENV_FLAG" ]] && URL="${URL}&env=${ENV_FLAG}"
+# Service token: required sejak Phase 5 (dashboard auth-gated).
+# Set via env var WRG_SERVICE_TOKEN (juga di launchd plist dashboard supaya
+# proses dashboard tahu nilainya). Generate: `openssl rand -hex 32`.
+if [[ -z "${WRG_SERVICE_TOKEN:-}" ]]; then
+  echo "ERROR: WRG_SERVICE_TOKEN env var unset — required for PDF export auth" >&2
+  echo "       Set di plist + cron env (sama dgn yg ada di dashboard plist)" >&2
+  exit 1
+fi
+
+# Build full URL via /api/auth/service-login (302 → next dgn session cookie).
+# Chrome stores Set-Cookie + follows redirect → semua fetch() di page auth-ed.
+INNER="/?export=pdf"
+[[ -n "$ENV_FLAG" ]] && INNER="${INNER}&env=${ENV_FLAG}"
+INNER_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$INNER")
+URL="${DASHBOARD_URL}/api/auth/service-login?token=${WRG_SERVICE_TOKEN}&next=${INNER_ENC}"
+# Fragment preserved across 302 by Chrome:
 URL="${URL}#from=${FROM}&to=${TO}"
 
 echo "Exporting:"
