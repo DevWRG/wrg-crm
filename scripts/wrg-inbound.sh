@@ -1375,11 +1375,26 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
       if [[ "$BODY" =~ \#[[:space:]]*([Pp][Ll][Aa][Nn]|[Rr][Ee][Pp][Oo][Rr][Tt]|[Ll][Ee][Aa][Dd][Ss]|[Uu][Pp][Dd][Aa][Tt][Ee]) ]]; then
         HASHTAG=$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
       else
-        # Non-hashtag check: image dgn caption numbered ("1.", "2.") dari sender
-        # yang punya pending AM activity hari ini → photo-followup pairing.
+        # Non-hashtag check: image dari sender yang punya pending AM activity
+        # hari ini → photo-followup pairing. Caption variants yang ditrigger:
+        #   "1.", "1)", "1:", "1." dst (numbered)
+        #   "#1", "#1 Customer Name" (hash prefix — iOS sometimes)
+        #   "Customer Name" plain text (no number) — fallback ke fuzzy name match
+        # Untuk plain text, cuma trigger kalo ada pending photo_path IS NULL
+        # row di activity_log hari ini (avoid noise on unrelated images).
+        FOLLOWUP_HIT=0
         if [ -n "$MEDIA_PATH" ] && [ -f "$MEDIA_PATH" ] && \
-           [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ] && \
-           echo "$BODY" | head -1 | grep -qE '^[[:space:]]*[0-9]+[.):]'; then
+           [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ]; then
+          FIRST_LINE=$(echo "$BODY" | head -1)
+          if echo "$FIRST_LINE" | grep -qE '^[[:space:]]*#?[[:space:]]*[0-9]+[.):]?'; then
+            FOLLOWUP_HIT=1
+          elif [ -n "$FIRST_LINE" ] && [ "${#FIRST_LINE}" -lt 100 ]; then
+            # Plain text — check ada pending row buat sender ini hari ini
+            PENDING_CNT=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$WA_NUM' AND tanggal = CURRENT_DATE AND photo_path IS NULL;" 2>/dev/null | head -1)
+            [ "${PENDING_CNT:-0}" -gt 0 ] 2>/dev/null && FOLLOWUP_HIT=1
+          fi
+        fi
+        if [ "$FOLLOWUP_HIT" = "1" ]; then
           if handle_am_followup_photo "$GROUP_JID" "$BODY" "$MEDIA_PATH" "$WA_NUM"; then
             $PSQL -c "INSERT INTO processed_message (message_id, wa_number, hashtag, status) VALUES ('$MSG_ID', '$WA_NUM', 'photo-followup', 'PHOTO_FOLLOWUP') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
             PROCESSED=$((PROCESSED + 1))
