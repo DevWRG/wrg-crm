@@ -151,6 +151,7 @@
                         <th style="padding:8px 10px; text-align:left;">Goal</th>
                         <th style="padding:8px 10px; text-align:center;">Status</th>
                         <th style="padding:8px 10px; text-align:left;">Hasil</th>
+                        <th style="padding:8px 10px; text-align:left;">Next</th>
                         <th style="padding:8px 10px; text-align:left;">Visit Geotag</th>
                       </tr></thead><tbody>
                       ${planRows.map((p) => {
@@ -167,6 +168,7 @@
                           <td style="padding:8px 10px; color:#64748b;">${escapeHtml(p.goal || '—')}</td>
                           <td style="padding:8px 10px; text-align:center;">${p.reported ? badge('reported', '#16a34a') : (p.is_late_plan ? badge('late', '#dc2626') : badge('pending', '#94a3b8'))}</td>
                           <td style="padding:8px 10px; font-size:11px; color:#475569;">${escapeHtml(p.hasil || '—')}</td>
+                          <td style="padding:8px 10px; font-size:11px; color:#475569;">${escapeHtml(p.next_action || '—')}</td>
                           <td style="padding:8px 10px; font-size:11px;">${visitCell}</td>
                         </tr>`;
                       }).join('')}
