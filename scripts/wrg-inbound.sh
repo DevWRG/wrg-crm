@@ -1495,7 +1495,10 @@ print(' UNION ALL '.join(parts))
         fi
       fi
 
-      # Tier C: sender pushname (nama/panggilan match, 4 sub-tiers).
+      # Tier C: sender pushname (nama/panggilan match, 5 sub-tiers).
+      # Pushname often has suffix like "Arif_Official", "IRUL|PT WAHANA GUMILANG",
+      # "John-Smith" — strip after first separator (_|/-\s) to extract first
+      # token, lalu match panggilan.
       if [ -z "$USER_ROW" ] && [ -n "$SENDER_NAME" ]; then
         SAFE_NAME=$(echo "$SENDER_NAME" | sed "s/'/''/g")
         USER_ROW=$($PSQL -c "
@@ -1506,13 +1509,15 @@ print(' UNION ALL '.join(parts))
              OR LOWER(panggilan) = LOWER('$SAFE_NAME')
              OR LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'
              OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))
+             OR LOWER(panggilan) = LOWER(regexp_replace('$SAFE_NAME', '[_|/\\\\\\-\\s].*\$', ''))
           ORDER BY
             CASE
               WHEN LOWER(nama)      = LOWER('$SAFE_NAME')                          THEN 1
               WHEN LOWER(panggilan) = LOWER('$SAFE_NAME')                          THEN 2
               WHEN LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'                    THEN 3
               WHEN LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))      THEN 4
-              ELSE 5
+              WHEN LOWER(panggilan) = LOWER(regexp_replace('$SAFE_NAME', '[_|/\\\\\\-\\s].*\$', '')) THEN 5
+              ELSE 6
             END,
             LENGTH(nama)
           LIMIT 1;
