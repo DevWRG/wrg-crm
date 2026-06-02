@@ -1161,20 +1161,25 @@ print(line.strip())
       SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || (CASE WHEN photo_path IS NOT NULL THEN 't' ELSE 'f' END) || E'\t' || ROUND(similarity(customer_name, '$SAFE_NAME')::numeric, 2)
       FROM activity_log
       WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+        AND photo_path IS NULL
         AND similarity(customer_name, '$SAFE_NAME') >= 0.30
       ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
       LIMIT 1;
     " 2>/dev/null | head -1)
   fi
 
-  # Fallback: ROW_NUMBER by index if name match failed
+  # Fallback: ROW_NUMBER by index if name match failed.
+  # Only consider rows yang masih pending (photo_path IS NULL) supaya ga
+  # ke-pair ke row yang udah ada foto (prevent overwrite + cross-AM collision
+  # ketika sender_wa_number shared across AM via grup yang sama).
   if [ -z "$TARGET_ROW" ] && [ -n "$IDX" ]; then
     TARGET_ROW=$($PSQL -c "
-      SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || (CASE WHEN photo_path IS NOT NULL THEN 't' ELSE 'f' END) || E'\t' || '0.00'
+      SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || 'f' || E'\t' || '0.00'
       FROM (
         SELECT *, ROW_NUMBER() OVER (ORDER BY id ASC) AS rn
         FROM activity_log
         WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+          AND photo_path IS NULL
       ) t WHERE rn = $IDX;
     " 2>/dev/null | head -1)
   fi
@@ -1365,7 +1370,7 @@ for D in "${DATES[@]}"; do
            [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ] && \
            echo "$BODY" | head -1 | grep -qE '^[[:space:]]*[0-9]+[.):]'; then
           if handle_am_followup_photo "$GROUP_JID" "$BODY" "$MEDIA_PATH" "$WA_NUM"; then
-            $PSQL -c "INSERT INTO processed_message (message_id, status) VALUES ('$MSG_ID', 'PHOTO_FOLLOWUP') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
+            $PSQL -c "INSERT INTO processed_message (message_id, wa_number, hashtag, status) VALUES ('$MSG_ID', '$WA_NUM', 'photo-followup', 'PHOTO_FOLLOWUP') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
             PROCESSED=$((PROCESSED + 1))
             HASHTAG_HITS=$((HASHTAG_HITS + 1))
             continue
