@@ -1314,6 +1314,17 @@ for D in "${DATES[@]}"; do
       SENDER_NAME=$(echo "$LINE" | jq -r '.sender_name // .sender' 2>/dev/null)
       GROUP_JID=$(echo "$LINE" | jq -r '.group_jid // empty' 2>/dev/null)
       BODY=$(echo "$LINE" | jq -r '.body // empty' 2>/dev/null)
+      # Strip invisible Unicode bidi/format chars (iOS WA suka inject LRM
+      # U+200E/RLM U+200F sebelum hashtag → bikin `^\s*#` regex miss).
+      # Juga strip ZWNJ/ZWJ U+200C-D, BOM U+FEFF, isolate marks U+2066-9,
+      # bidi formatting U+202A-E.
+      BODY=$(printf '%s' "$BODY" | python3 -c '
+import sys, re
+# LRM U+200E, RLM U+200F, ZWNJ U+200C, ZWJ U+200D, ZWSP U+200B,
+# bidi formatting U+202A-E, isolates U+2066-9, BOM U+FEFF
+PATTERN = re.compile("[​‌‍‎‏‪‫‬‭‮⁦⁧⁨⁩﻿]")
+sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
+' 2>/dev/null)
       MEDIA_TYPE=$(echo "$LINE" | jq -r '.media_type // empty' 2>/dev/null)
       MEDIA_PATH=$(echo "$LINE" | jq -r '.media_path // empty' 2>/dev/null)
 
