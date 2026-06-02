@@ -1039,6 +1039,27 @@ PYEOF
           reported_at   = NOW()
       WHERE id = $TODO_ID;
     " >/dev/null 2>>"$LOG_DIR/daily.log"
+  else
+    # Ad-hoc report — user skip #PLAN tapi langsung #REPORT. Insert sales_todo
+    # row baru dgn items dari report (jadi items=baru semua), is_late_plan=TRUE,
+    # reported=TRUE. Supaya report_check ga warn "no plan" + dashboard reflect
+    # bahwa user submitted.
+    local ITEMS_JSON SAFE_ITEMS SAFE_DATA
+    ITEMS_JSON=$(echo "$REPORT_ITEMS_JSON" | jq -c '[.[] | .task]')
+    SAFE_ITEMS=$(echo "$ITEMS_JSON" | sed "s/'/''/g")
+    SAFE_DATA=$(echo "$MATCHED_DATA" | sed "s/'/''/g")
+    TODO_ID=$($PSQL -c "
+      INSERT INTO sales_todo (user_id, tanggal, items, is_late_plan, reported, reported_at, report_data, report_msg_id, submitted_at)
+      VALUES ($USER_ID, '$TGL_ISO', '$SAFE_ITEMS'::jsonb, TRUE, TRUE, NOW(), '$SAFE_DATA'::jsonb, '$MSG_ID', NOW())
+      ON CONFLICT (user_id, tanggal) DO UPDATE
+        SET items = EXCLUDED.items,
+            reported = TRUE,
+            reported_at = NOW(),
+            report_data = EXCLUDED.report_data,
+            report_msg_id = EXCLUDED.report_msg_id
+      RETURNING id;
+    " 2>/dev/null | head -1)
+    log "  #REPORT TODO ad-hoc: user=$USER_ID inserted todo_id=$TODO_ID dgn $N items (no prior #PLAN)"
   fi
 
   # Build reply

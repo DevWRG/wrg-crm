@@ -127,7 +127,8 @@ WITH today_status AS (
     CASE WHEN COALESCE(st.total_todo, 0) > 0
               AND COALESCE(st.reported_count, 0) = 0
          THEN 1 ELSE 0 END                              AS st_unreported,
-    sp.unreported_customers
+    sp.unreported_customers,
+    COALESCE(al.total_activity, 0)                      AS al_total
   FROM master_user mu
   LEFT JOIN LATERAL (
     SELECT
@@ -145,6 +146,13 @@ WITH today_status AS (
     FROM sales_todo
     WHERE user_id = mu.id AND tanggal = CURRENT_DATE
   ) st ON TRUE
+  LEFT JOIN LATERAL (
+    -- Activity log presence — user yg report ad-hoc tanpa plan tetap counted
+    -- sebagai sudah submit (avoid "no-plan" warning meskipun ga ada sales_plan/todo).
+    SELECT COUNT(*) AS total_activity
+    FROM activity_log
+    WHERE user_id = mu.id AND tanggal = CURRENT_DATE
+  ) al ON TRUE
   WHERE mu.aktif = TRUE
     AND COALESCE(mu.wajib_plan_report, TRUE) = TRUE
     AND NOT is_on_leave(mu.id, CURRENT_DATE)
@@ -161,8 +169,8 @@ FROM today_status
 WHERE
   -- punya plan/todo tapi belum semua report
   ((sp_total + st_total) > 0 AND (sp_unreported + st_unreported) > 0)
-  -- atau gak punya plan/todo sama sekali (no-plan warning)
-  OR ((sp_total + st_total) = 0)
+  -- atau gak punya plan/todo DAN gak ada activity log (ad-hoc report) → no-plan warning
+  OR ((sp_total + st_total) = 0 AND al_total = 0)
 ORDER BY nama;
 SQL
 )
