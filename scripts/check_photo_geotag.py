@@ -96,10 +96,19 @@ def main():
         # C) "-7.2822, 112.7548"               (plain coord pair, no degree)
         def repair_coord(raw, kind):
             """Recover decimal point if OCR dropped it. kind='lat' or 'lon'.
-            Indonesia: lat -11..6 (1-2 digits before .), lon 95..141 (3 before)."""
-            s = raw.replace(',', '.')
+            Indonesia: lat -11..6 (1-2 digits before .), lon 95..141 (3 before).
+            Strips whitespace dari raw (OCR kadang split '-7. 624698')."""
+            s = raw.replace(',', '.').replace(' ', '').replace('\t', '')
             if '.' in s:
-                return float(s)
+                try:
+                    val = float(s)
+                    # Check bounds — kalau ada trailing dot tanpa digit ('-7.'),
+                    # python float bisa parse '-7.' = -7.0 yang salah. Validate.
+                    if s.endswith('.'):
+                        raise ValueError("trailing dot, treat as missing-decimal")
+                    return val
+                except ValueError:
+                    pass
             sign = -1 if s.startswith('-') else 1
             digits = s.lstrip('-')
             if not digits.isdigit():
@@ -119,7 +128,12 @@ def main():
                             return candidate
             raise ValueError(f"can't repair: {raw}")
 
-        m = re.search(r'Lat\s*(-?[\d.,]+)\s+Long\s*(-?[\d.,]+)', text, re.I)
+        # Lat/Long with optional OCR garbage between keyword + digits.
+        # `Lat ui 624698 Long 111.494828` — OCR misread `-7.` as `ui`.
+        # `Lat-7. 624698 Long 111.494828` — OCR split decimal cluster.
+        # Capture greedy cluster of digits/dot/comma/space between Lat..Long,
+        # then strip whitespace dlm repair_coord.
+        m = re.search(r'Lat[^0-9\-]*(-?[\d.,\s]+?)\s*(?:Long|Lon|Lng)[^0-9\-]*(-?[\d.,]+)', text, re.I)
         if not m:
             m = re.search(r'(-?\d+[.,]\d{3,})\s*°[°,\s]+(-?\d+[.,]\d{3,})\s*°?', text)
         if not m:
