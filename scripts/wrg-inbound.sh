@@ -1430,10 +1430,16 @@ handle_update() {
 
 # ── Main loop ───────────────────────────────────────────────
 
-# Read cursor (default to current time minus 5 min for first run)
+# Read cursor (default to current time minus 5 min for first run).
+# LOOKBACK_SEC: openclaw kadang lazy-write msgs ke JSONL beberapa menit
+# setelah ts asli — kalau cursor advance dulu, msg jadi permanently skipped.
+# Re-scan window + processed_message dedup = no double-process. 2 silent
+# skips terobservasi 2026-06-03 (Nungky #Report, Udin #Report).
+LOOKBACK_SEC=600
 SINCE_TS=0
 if [ -f "$CURSOR_FILE" ]; then
-  SINCE_TS=$(cat "$CURSOR_FILE" | tr -d '\n' | tr -d ' ')
+  RAW_CURSOR=$(cat "$CURSOR_FILE" | tr -d '\n' | tr -d ' ')
+  SINCE_TS=$((RAW_CURSOR - LOOKBACK_SEC))
 else
   SINCE_TS=$(($(date +%s) - 300))
 fi
