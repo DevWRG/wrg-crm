@@ -16,21 +16,34 @@
       })();
     </script>
     <style>
-      .cal-table { width:100%; border-collapse:collapse; font-size:12px; }
-      .cal-table th, .cal-table td { border:1px solid #e2e8f0; padding:6px 8px; }
-      .cal-table thead th { background:#f8fafc; font-weight:600; text-align:center; white-space:nowrap; }
-      .cal-table .am-cell { background:#f8fafc; font-weight:600; white-space:nowrap; min-width:140px; }
-      .cal-table .day-cell { text-align:center; cursor:pointer; min-width:80px; transition:background 0.15s; }
-      .cal-table .day-cell:hover { background:#fef3c7; }
-      .cal-table .day-cell.full { background:#dcfce7; color:#166534; }
-      .cal-table .day-cell.partial { background:#fef3c7; color:#92400e; }
-      .cal-table .day-cell.late { background:#fee2e2; color:#991b1b; }
-      .cal-table .day-cell.none { background:#f3f4f6; color:#9ca3af; }
-      .cal-table .day-cell.weekend { background:#fafafa; color:#cbd5e1; }
-      .cal-table .stats { font-size:10px; line-height:1.3; }
-      .cal-table .geo-mark { font-size:11px; }
-      .cal-legend { display:flex; gap:14px; font-size:12px; color:#64748b; margin-top:12px; flex-wrap:wrap; }
-      .cal-legend .box { display:inline-block; width:14px; height:14px; vertical-align:middle; border-radius:3px; border:1px solid #e2e8f0; margin-right:4px; }
+      .cal-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
+      .cal-title { font-size:28px; font-weight:600; margin:0; }
+      .cal-title .year { color:#94a3b8; font-weight:400; margin-left:6px; }
+      .cal-nav { display:flex; gap:6px; align-items:center; }
+      .cal-nav button { padding:6px 12px; }
+      .cal-view-tabs { display:inline-flex; background:#f1f5f9; border-radius:8px; padding:3px; gap:2px; }
+      .cal-view-tabs button { padding:5px 14px; border:none; background:transparent; border-radius:6px; font-size:13px; color:#64748b; cursor:pointer; transition:all 0.15s; }
+      .cal-view-tabs button.active { background:#fff; color:#0f172a; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+      .cal-filter { display:flex; gap:8px; flex-wrap:wrap; }
+      .cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#e2e8f0; gap:1px; }
+      .cal-day-header { background:#fafbfc; padding:8px 12px; font-size:12px; color:#64748b; text-align:left; font-weight:500; }
+      .cal-day-header.weekend { background:#f8fafc; }
+      .cal-cell { background:#fff; min-height:120px; padding:8px 10px; cursor:pointer; transition:background 0.12s; display:flex; flex-direction:column; gap:4px; }
+      .cal-cell:hover { background:#fafbfc; }
+      .cal-cell.outside { background:#fafbfc; }
+      .cal-cell.outside .cal-date { color:#cbd5e1; }
+      .cal-cell.today { background:#fef3c7; }
+      .cal-cell.today .cal-date { background:#dc2626; color:#fff; border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; font-size:13px; }
+      .cal-cell.weekend { background:#fafbfc; }
+      .cal-cell.holiday { background:#fff7ed; }
+      .cal-date { font-size:14px; font-weight:500; color:#0f172a; }
+      .cal-pill { display:inline-block; max-width:100%; padding:2px 8px; border-radius:10px; font-size:11px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .cal-pill.holiday { background:#f5d0fe; color:#86198f; }
+      .cal-pill.full { background:#dcfce7; color:#166534; }
+      .cal-pill.partial { background:#fef3c7; color:#92400e; }
+      .cal-pill.late { background:#fee2e2; color:#991b1b; }
+      .cal-pill.none { background:#f1f5f9; color:#64748b; }
+      .cal-pill.am { background:#e0f2fe; color:#0369a1; }
     </style>
   </head>
   <body data-active="sales-calendar" data-crumbs="WRG CRM &gt; Sales Calendar">
@@ -44,45 +57,40 @@
           <div class="hero-text">
             <span class="eyebrow">Sales</span>
             <h1 class="hero-title">Sales <span class="accent">Calendar</span></h1>
-            <p class="hero-sub">Kalender plan & report Account Manager. Klik cell untuk drilldown per AM-tanggal.</p>
+            <p class="hero-sub">Kalender plan & report Account Manager + libur nasional. Klik tanggal untuk drilldown.</p>
           </div>
-          <div class="hero-actions">
-            <input type="date" id="dateFrom" class="btn btn--ghost" style="padding:6px 10px;">
-            <input type="date" id="dateTo" class="btn btn--ghost" style="padding:6px 10px;">
-            <button class="btn btn--ghost" data-preset="week">Minggu ini</button>
-            <button class="btn btn--ghost" data-preset="lastweek">Minggu lalu</button>
-            <button class="btn btn--ghost" data-preset="month">Bulan ini</button>
+          <div class="hero-actions cal-filter">
+            <select id="amFilter" class="btn btn--ghost" style="padding:6px 10px;">
+              <option value="">Semua AM</option>
+            </select>
             <select id="cabangFilter" class="btn btn--ghost" style="padding:6px 10px;">
               <option value="">Semua cabang</option>
             </select>
-            <button class="btn btn--primary" id="btnApply">Apply</button>
           </div>
         </section>
 
         <div class="grid">
           <section class="col-12 card">
-            <div class="card-head">
-              <div class="card-title-wrap">
-                <span class="eyebrow">AM coverage</span>
-                <h2 class="card-title">Plan & Report Calendar</h2>
+            <div class="cal-header">
+              <h2 class="cal-title" id="calTitle">—</h2>
+              <div class="cal-view-tabs">
+                <button class="active" data-view="month">Month</button>
+                <button data-view="week">Week</button>
               </div>
-              <span class="card-action" id="calRange">—</span>
+              <div class="cal-nav">
+                <button class="btn btn--ghost" id="navPrev">‹</button>
+                <button class="btn btn--ghost" id="navToday">Today</button>
+                <button class="btn btn--ghost" id="navNext">›</button>
+              </div>
             </div>
-            <div style="overflow-x:auto; max-width:100%;">
-              <table class="cal-table" id="calTable">
-                <thead><tr id="calHead"></tr></thead>
-                <tbody id="calBody">
-                  <tr><td style="padding:24px; text-align:center; color:#94a3b8;" id="calLoading">Memuat…</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="cal-legend">
-              <span><span class="box" style="background:#dcfce7;"></span>All reported</span>
-              <span><span class="box" style="background:#fef3c7;"></span>Partial reported</span>
-              <span><span class="box" style="background:#fee2e2;"></span>Late / no report</span>
-              <span><span class="box" style="background:#f3f4f6;"></span>No plan</span>
-              <span><span class="box" style="background:#fafafa;"></span>Weekend / libur</span>
-              <span>📍 = ada visit geotag</span>
+            <div class="cal-grid" id="calGrid">
+              <div class="cal-day-header">Sun</div>
+              <div class="cal-day-header">Mon</div>
+              <div class="cal-day-header">Tue</div>
+              <div class="cal-day-header">Wed</div>
+              <div class="cal-day-header">Thu</div>
+              <div class="cal-day-header">Fri</div>
+              <div class="cal-day-header weekend">Sat</div>
             </div>
           </section>
         </div>
@@ -91,158 +99,208 @@
           (function () {
             'use strict';
             const $ = (id) => document.getElementById(id);
+            const escapeHtml = (s) => (s == null ? '' : String(s)).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-            function fmtDate(d) {
-              if (typeof d === 'string') d = new Date(d);
-              return d.toISOString().slice(0, 10);
-            }
-            function fmtDayShort(d) {
-              const days = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
-              return `${days[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`;
-            }
-            function eachDay(from, to) {
-              const out = [];
-              const d = new Date(from);
-              const end = new Date(to);
-              while (d <= end) { out.push(new Date(d)); d.setDate(d.getDate() + 1); }
-              return out;
-            }
+            const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            let view = 'month';
+            let cursor = new Date(); // first day of currently-viewed month/week
+            let allAMs = [];
+            let cache = {}; // by `${user_id}_${from}_${to}` → drilldown plans
+            let holidays = []; // [{tanggal, keterangan}]
 
-            // Date presets
-            function setRange(from, to) {
-              $('dateFrom').value = fmtDate(from);
-              $('dateTo').value = fmtDate(to);
-            }
-            function thisWeek() {
-              const t = new Date();
-              const day = t.getDay() || 7; // 1=Mon..7=Sun
-              const mon = new Date(t); mon.setDate(t.getDate() - (day - 1));
-              const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-              return [mon, sun];
-            }
-            function lastWeek() {
-              const [mon] = thisWeek();
-              const lmon = new Date(mon); lmon.setDate(mon.getDate() - 7);
-              const lsun = new Date(lmon); lsun.setDate(lmon.getDate() + 6);
-              return [lmon, lsun];
-            }
-            function thisMonth() {
-              const t = new Date();
-              const first = new Date(t.getFullYear(), t.getMonth(), 1);
-              const last = new Date(t.getFullYear(), t.getMonth() + 1, 0);
-              return [first, last];
-            }
-            document.querySelectorAll('[data-preset]').forEach((btn) => {
-              btn.addEventListener('click', () => {
-                const p = btn.dataset.preset;
-                const range = p === 'week' ? thisWeek() : p === 'lastweek' ? lastWeek() : thisMonth();
-                setRange(range[0], range[1]);
-                load();
-              });
-            });
-            $('btnApply').addEventListener('click', load);
+            function fmtDate(d) { return d.toISOString().slice(0,10); }
+            function pad(n) { return n.toString().padStart(2,'0'); }
+            function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+            function startOfWeek(d) { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }
 
-            // Initial: this week
-            const [iFrom, iTo] = thisWeek();
-            setRange(iFrom, iTo);
-
-            // Load cabang options
-            async function loadCabang() {
+            async function loadAMs() {
               try {
                 const r = await fetch('/api/users');
-                if (!r.ok) return;
                 const json = await r.json();
-                const cabs = [...new Set((json.rows || []).filter((u) => u.role === 'AM' && u.aktif).map((u) => u.cabang))].sort();
+                allAMs = (json.rows || []).filter((u) => u.role === 'AM' && u.aktif);
+                const amSel = $('amFilter');
+                allAMs.sort((a, b) => (a.cabang || '').localeCompare(b.cabang || '') || (a.panggilan || '').localeCompare(b.panggilan || ''));
+                allAMs.forEach((a) => {
+                  const opt = document.createElement('option');
+                  opt.value = a.id; opt.textContent = `${a.panggilan} (${a.cabang})`;
+                  amSel.appendChild(opt);
+                });
+                const cabSel = $('cabangFilter');
+                const cabs = [...new Set(allAMs.map((a) => a.cabang))].sort();
                 cabs.forEach((c) => {
                   const opt = document.createElement('option');
                   opt.value = c; opt.textContent = c;
-                  $('cabangFilter').appendChild(opt);
+                  cabSel.appendChild(opt);
                 });
               } catch (e) { console.error(e); }
             }
 
-            async function load() {
-              const from = $('dateFrom').value;
-              const to = $('dateTo').value;
-              if (!from || !to) return;
-              $('calRange').textContent = `${from} → ${to}`;
-              $('calLoading').textContent = 'Memuat data AM…';
-
-              const cabangFilter = $('cabangFilter').value;
-
+            async function loadHolidays() {
               try {
-                // Get all AM users
-                const ur = await fetch('/api/users');
-                const ujson = await ur.json();
-                let ams = (ujson.rows || []).filter((u) => u.role === 'AM' && u.aktif);
-                if (cabangFilter) ams = ams.filter((a) => a.cabang === cabangFilter);
-                ams.sort((a, b) => (a.cabang || '').localeCompare(b.cabang || '') || (a.panggilan || '').localeCompare(b.panggilan || ''));
+                const r = await fetch('/api/holidays');
+                if (!r.ok) return;
+                const json = await r.json();
+                holidays = json.rows || [];
+              } catch (e) { console.error(e); }
+            }
 
-                if (ams.length === 0) {
-                  $('calBody').innerHTML = '<tr><td style="padding:24px; text-align:center; color:#94a3b8;">Tidak ada AM aktif untuk filter ini.</td></tr>';
-                  $('calHead').innerHTML = '';
-                  return;
-                }
+            async function fetchAMPlans(amId, from, to) {
+              const key = `${amId}_${from}_${to}`;
+              if (cache[key]) return cache[key];
+              try {
+                const r = await fetch(`/api/drilldown?user_id=${amId}&from=${from}&to=${to}`);
+                if (!r.ok) return [];
+                const json = await r.json();
+                cache[key] = json.plans || [];
+                return cache[key];
+              } catch (e) { return []; }
+            }
 
-                // Fetch drilldown per AM (parallel)
-                const days = eachDay(from, to);
-                const drilldowns = await Promise.all(ams.map(async (am) => {
-                  try {
-                    const r = await fetch(`/api/drilldown?user_id=${am.id}&from=${from}&to=${to}`);
-                    if (!r.ok) return { user: am, plans: [] };
-                    const json = await r.json();
-                    return { user: am, plans: json.plans || [] };
-                  } catch (e) { return { user: am, plans: [] }; }
-                }));
-
-                // Build header
-                const headHtml = `<th class="am-cell">AM (Cabang)</th>` + days.map((d) => {
-                  const wknd = d.getDay() === 0 || d.getDay() === 6;
-                  return `<th style="${wknd ? 'background:#fafafa; color:#9ca3af;' : ''}">${fmtDayShort(d)}</th>`;
-                }).join('');
-                $('calHead').innerHTML = headHtml;
-
-                // Build rows
-                const rowsHtml = drilldowns.map(({ user, plans }) => {
-                  const cells = days.map((d) => {
-                    const wknd = d.getDay() === 0 || d.getDay() === 6;
-                    const dStr = fmtDate(d);
-                    const dayPlans = plans.filter((p) => (p.tanggal || '').startsWith(dStr));
-                    const total = dayPlans.length;
-                    const reported = dayPlans.filter((p) => p.reported).length;
-                    const withGeo = dayPlans.filter((p) => p.visit_lat).length;
-                    const anyLate = dayPlans.some((p) => p.is_late_plan && !p.reported);
-
-                    let cls;
-                    if (total === 0) cls = wknd ? 'weekend' : 'none';
-                    else if (reported === total) cls = 'full';
-                    else if (reported > 0) cls = 'partial';
-                    else cls = anyLate ? 'late' : 'partial';
-
-                    const url = `/drilldown.html?user_id=${user.id}&from=${dStr}&to=${dStr}`;
-                    const stats = total === 0
-                      ? '<span class="stats">—</span>'
-                      : `<div class="stats"><strong>${reported}/${total}</strong> rep${withGeo > 0 ? ` <span class="geo-mark">📍${withGeo}</span>` : ''}</div>`;
-
-                    return `<td class="day-cell ${cls}" onclick="window.location='${url}'">${stats}</td>`;
-                  }).join('');
-                  return `<tr><td class="am-cell"><a href="/drilldown.html?user_id=${user.id}&from=${from}&to=${to}" style="color:inherit; text-decoration:none;">${escapeHtml(user.panggilan)} <small style="color:#94a3b8; font-weight:400;">(${escapeHtml(user.cabang || '-')})</small></a></td>${cells}</tr>`;
-                }).join('');
-
-                $('calBody').innerHTML = rowsHtml;
-              } catch (e) {
-                console.error(e);
-                $('calBody').innerHTML = `<tr><td style="padding:24px; text-align:center; color:#dc2626;">Error: ${e.message}</td></tr>`;
+            function getRangeForView() {
+              if (view === 'month') {
+                const first = startOfMonth(cursor);
+                const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+                // Calendar grid starts at preceding Sunday
+                const gridStart = startOfWeek(first);
+                const gridEnd = new Date(gridStart);
+                gridEnd.setDate(gridEnd.getDate() + 41); // 6 weeks
+                return { display: first, last, gridStart, gridEnd };
+              } else {
+                const gridStart = startOfWeek(cursor);
+                const gridEnd = new Date(gridStart);
+                gridEnd.setDate(gridEnd.getDate() + 6);
+                return { display: gridStart, last: gridEnd, gridStart, gridEnd };
               }
             }
 
-            function escapeHtml(s) {
-              return (s == null ? '' : String(s)).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            async function render() {
+              const range = getRangeForView();
+              // Update title
+              if (view === 'month') {
+                $('calTitle').innerHTML = `${MONTHS[range.display.getMonth()]} <span class="year">${range.display.getFullYear()}</span>`;
+              } else {
+                const s = range.gridStart, e = range.gridEnd;
+                $('calTitle').innerHTML = `${s.getDate()} ${MONTHS[s.getMonth()].slice(0,3)} – ${e.getDate()} ${MONTHS[e.getMonth()].slice(0,3)} <span class="year">${e.getFullYear()}</span>`;
+              }
+
+              const from = fmtDate(range.gridStart);
+              const to = fmtDate(range.gridEnd);
+
+              // Filter AMs
+              let amsToFetch = allAMs;
+              const amFilter = $('amFilter').value;
+              const cabFilter = $('cabangFilter').value;
+              if (amFilter) amsToFetch = amsToFetch.filter((a) => String(a.id) === amFilter);
+              if (cabFilter) amsToFetch = amsToFetch.filter((a) => a.cabang === cabFilter);
+
+              // Fetch plans
+              const allPlans = (await Promise.all(amsToFetch.map((am) =>
+                fetchAMPlans(am.id, from, to).then((p) => p.map((x) => ({ ...x, _amId: am.id, _amName: am.panggilan, _amCab: am.cabang })))
+              ))).flat();
+
+              // Group plans by date
+              const byDate = {};
+              allPlans.forEach((p) => {
+                const d = (p.tanggal || '').slice(0,10);
+                (byDate[d] = byDate[d] || []).push(p);
+              });
+
+              // Group holidays by date
+              const holByDate = {};
+              holidays.forEach((h) => { holByDate[h.tanggal] = h.keterangan; });
+
+              // Build cells
+              const cells = [];
+              const today = fmtDate(new Date());
+              const numCells = view === 'month' ? 42 : 7;
+              for (let i = 0; i < numCells; i++) {
+                const d = new Date(range.gridStart);
+                d.setDate(d.getDate() + i);
+                const ds = fmtDate(d);
+                const isOutside = view === 'month' && d.getMonth() !== range.display.getMonth();
+                const isToday = ds === today;
+                const isWknd = d.getDay() === 0 || d.getDay() === 6;
+                const isHoliday = !!holByDate[ds];
+
+                const dayPlans = byDate[ds] || [];
+                // Group by AM
+                const byAM = {};
+                dayPlans.forEach((p) => {
+                  const key = `${p._amId}_${p._amName}_${p._amCab}`;
+                  byAM[key] = byAM[key] || { name: p._amName, cab: p._amCab, total: 0, reported: 0, geo: 0, late: false };
+                  byAM[key].total++;
+                  if (p.reported) byAM[key].reported++;
+                  if (p.visit_lat) byAM[key].geo++;
+                  if (p.is_late_plan) byAM[key].late = true;
+                });
+
+                let pills = '';
+                if (isHoliday) {
+                  pills += `<div class="cal-pill holiday" title="${escapeHtml(holByDate[ds])}">⭐ ${escapeHtml(holByDate[ds])}</div>`;
+                }
+                const amEntries = Object.values(byAM);
+                amEntries.sort((a, b) => a.name.localeCompare(b.name));
+                amEntries.slice(0, 5).forEach((am) => {
+                  const cls = am.reported === am.total ? 'full' : (am.reported > 0 ? 'partial' : (am.late ? 'late' : 'none'));
+                  const geoMark = am.geo > 0 ? ` 📍${am.geo}` : '';
+                  pills += `<div class="cal-pill ${cls}" title="${escapeHtml(am.name)} (${escapeHtml(am.cab)}): ${am.reported}/${am.total} reported${geoMark}">${escapeHtml(am.name)} ${am.reported}/${am.total}${geoMark}</div>`;
+                });
+                if (amEntries.length > 5) {
+                  pills += `<div class="cal-pill none">+${amEntries.length - 5} AM</div>`;
+                }
+
+                const classes = ['cal-cell'];
+                if (isOutside) classes.push('outside');
+                if (isToday) classes.push('today');
+                else if (isHoliday) classes.push('holiday');
+                else if (isWknd) classes.push('weekend');
+
+                const drillUrl = amFilter
+                  ? `/drilldown.html?user_id=${amFilter}&from=${ds}&to=${ds}`
+                  : `/?from=${ds}&to=${ds}`;
+
+                cells.push(`<div class="${classes.join(' ')}" onclick="window.location='${drillUrl}'">
+                  <div class="cal-date">${d.getDate()}</div>
+                  ${pills}
+                </div>`);
+              }
+
+              // Insert cells (preserve day headers)
+              const grid = $('calGrid');
+              // Remove old cells (keep first 7 headers)
+              const headers = Array.from(grid.children).slice(0, 7);
+              grid.innerHTML = '';
+              headers.forEach((h) => grid.appendChild(h));
+              grid.insertAdjacentHTML('beforeend', cells.join(''));
             }
 
+            // Navigation
+            $('navPrev').addEventListener('click', () => {
+              if (view === 'month') cursor.setMonth(cursor.getMonth() - 1);
+              else cursor.setDate(cursor.getDate() - 7);
+              render();
+            });
+            $('navNext').addEventListener('click', () => {
+              if (view === 'month') cursor.setMonth(cursor.getMonth() + 1);
+              else cursor.setDate(cursor.getDate() + 7);
+              render();
+            });
+            $('navToday').addEventListener('click', () => { cursor = new Date(); render(); });
+            document.querySelectorAll('.cal-view-tabs button').forEach((b) => {
+              b.addEventListener('click', () => {
+                document.querySelectorAll('.cal-view-tabs button').forEach((x) => x.classList.remove('active'));
+                b.classList.add('active');
+                view = b.dataset.view;
+                render();
+              });
+            });
+            $('amFilter').addEventListener('change', () => { cache = {}; render(); });
+            $('cabangFilter').addEventListener('change', () => { cache = {}; render(); });
+
             (async () => {
-              await loadCabang();
-              await load();
+              await loadAMs();
+              await loadHolidays();
+              await render();
             })();
           })();
         </script>
