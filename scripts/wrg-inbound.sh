@@ -970,42 +970,60 @@ if mm:
 ⚠️ Note diabaikan: tanggal $N_TGL sudah lewat."
         continue
       fi
-      # Auto-detect customer: extract numbered customer headers dari body
-      # report ("1. RS Mitra Keluarga", "2. Lab Prodia Surabaya", ...), lalu
-      # fuzzy match keterangan note ke list itu. Best match (sim ≥ 0.20) →
-      # customer_name. Kalau ga match → NULL.
+      # Auto-detect customer: scan body line-by-line, track LAST numbered
+      # customer header seen. Saat ketemu line `note:`, associate dgn last
+      # customer header (positional context — note ditulis di bawah customer
+      # entry-nya). Fallback fuzzy match kalau positional gagal.
       local SAFE_KET N_CUST
       SAFE_KET=$(echo "$N_KET" | sed "s/'/''/g")
       N_CUST=$(printf '%s\n###KET###\n%s' "$BODY" "$N_KET" | python3 -c '
 import sys, re
 parts = sys.stdin.read().split("###KET###")
-body, ket = parts[0], parts[1].strip().lower() if len(parts) > 1 else ""
+body, ket = parts[0], parts[1].strip() if len(parts) > 1 else ""
 if not ket: sys.exit(0)
-# Extract numbered customer headers
-customers = []
+
+# Pass 1: walk body, track last customer for each note position
+note_to_cust = {}  # ket_text → customer_name
+last_cust = None
+all_customers = []
 for line in body.splitlines():
-    m = re.match(r"^\s*[0-9]+[.):]\s*([^|/\n]{2,80}?)(\s*[|/]|$)", line)
-    if m:
-        cust = m.group(1).strip()
-        # Strip *update prefix
+    # Numbered customer header — capture customer name
+    mc = re.match(r"^\s*[0-9]+[.):]\s*([^|/\n]{2,80}?)(\s*[|/]|$)", line)
+    if mc:
+        cust = mc.group(1).strip()
         cust = re.sub(r"^\*\s*update\s+", "", cust, flags=re.I).strip()
         if cust:
-            customers.append(cust)
-if not customers: sys.exit(0)
-# Fuzzy: count overlapping tokens between ket and each customer
+            last_cust = cust
+            all_customers.append(cust)
+        continue
+    # Note line — bind to last_cust
+    mn = re.match(r"^\s*note\s*:\s*(.+)$", line, re.I)
+    if mn:
+        # Compare ket_text (everything after "note:") with our target ket
+        ket_full = mn.group(1).strip()
+        if ket in ket_full or ket_full.endswith(ket):
+            if last_cust:
+                note_to_cust[ket] = last_cust
+
+if ket in note_to_cust:
+    print(note_to_cust[ket])
+    sys.exit(0)
+
+# Fallback: fuzzy match kalau positional ga deteksi
+if not all_customers: sys.exit(0)
 STOP = {"visit", "kunjungan", "fisik", "follow", "fwup", "next", "hasil",
         "untuk", "dari", "deal", "closing", "yang", "dan", "atau", "kepada",
-        "akan", "selesai", "tunggu", "report", "the", "with", "ulang"}
+        "akan", "selesai", "tunggu", "report", "the", "with", "ulang",
+        "ketemu", "kepala", "direktur"}
 def tokens(s):
     return set(t for t in re.findall(r"[a-zA-Z]{3,}", s.lower()) if t not in STOP)
 ket_toks = tokens(ket)
 best = ("", 0.0)
-for c in customers:
+for c in all_customers:
     c_toks = tokens(c)
     if not c_toks or not ket_toks: continue
     overlap = len(ket_toks & c_toks)
     if not overlap: continue
-    # Max coverage of either side — handles short ket vs long cust + vice versa
     score = max(overlap / len(c_toks), overlap / len(ket_toks))
     if score > best[1]:
         best = (c, score)
