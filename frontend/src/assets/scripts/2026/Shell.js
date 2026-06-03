@@ -32,6 +32,13 @@ export const NAV = [
     ],
   },
   {
+    label: 'Sales',
+    items: [
+      { key: 'sales-calendar', text: 'Sales Calendar', href: 'sales-calendar.html',
+        icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="8" cy="14" r="1.5" fill="currentColor"/><circle cx="16" cy="14" r="1.5" fill="currentColor"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/>' },
+    ],
+  },
+  {
     label: 'Admin',
     items: [
       { key: 'users', text: 'Users', href: 'users.html',
@@ -286,7 +293,7 @@ export function mountShell() {
 
   // Auth bootstrap — WRG pages (Adminator demo pages bypass).
   // Skip on login page itself. Check /api/auth/me, redirect to login if 401.
-  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users', 'drilldown'].includes(activeKey);
+  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users', 'drilldown', 'sales-calendar'].includes(activeKey);
   if (isWrgPage) {
     fetch('/api/auth/me')
       .then((r) => r.ok ? r.json() : null)
