@@ -614,8 +614,13 @@ lines = [l for l in body.splitlines()
 # Strip unicode invisible chars + numbering when present.
 
 def strip_num(s):
-    # Strip leading "N." or "N)" + any non-letter chars (incl. U+2060)
-    return re.sub(r"^\s*[0-9]+[.)][^A-Za-z]*", "", s).strip()
+    # Strip leading "N." or "N)" + any non-letter chars (incl. U+2060).
+    # Also strip "*update " / "*UPDATE " prefix yang AM kadang pakai untuk
+    # tandai customer baru di luar plan (badge *update di-render via dashboard
+    # by is_unmatched flag, jangan stored di customer_name).
+    s = re.sub(r"^\s*[0-9]+[.)][^A-Za-z]*", "", s).strip()
+    s = re.sub(r"^\*\s*update\s+", "", s, flags=re.I).strip()
+    return s
 
 out = []
 current = None
