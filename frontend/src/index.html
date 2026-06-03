@@ -80,6 +80,34 @@
           </article>
         </section>
 
+        <!-- ============ REMINDER PENDING REPORT WIDGET ============ -->
+        <section class="card" id="reminderPendingCard" style="margin-top:16px; margin-bottom:24px; display:none;">
+          <div class="card-head">
+            <div class="card-title-wrap">
+              <span class="eyebrow" style="color:#ef4444;">⚠️ Reminder</span>
+              <h2 class="card-title" id="reminderTitle">Belum Report Hari Ini</h2>
+            </div>
+            <button class="btn btn--ghost" id="reminderToggle" style="font-size:13px;">Sembunyikan</button>
+          </div>
+          <div id="reminderBody">
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+              <div class="reminder-pill reminder-am" data-tier="am" style="flex:1; min-width:120px; padding:10px 14px; border-radius:10px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); cursor:pointer;">
+                <div style="font-size:11px; opacity:0.7;">AM (visit pending)</div>
+                <div style="font-size:24px; font-weight:600;" id="reminderCountAm">—</div>
+              </div>
+              <div class="reminder-pill reminder-todo" data-tier="todo" style="flex:1; min-width:120px; padding:10px 14px; border-radius:10px; background:rgba(156,163,175,0.15); border:1px solid rgba(156,163,175,0.3); cursor:pointer;">
+                <div style="font-size:11px; opacity:0.7;">TODO (report pending)</div>
+                <div style="font-size:24px; font-weight:600;" id="reminderCountTodo">—</div>
+              </div>
+              <div class="reminder-pill reminder-zero" data-tier="zero" style="flex:1; min-width:120px; padding:10px 14px; border-radius:10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); cursor:pointer;">
+                <div style="font-size:11px; opacity:0.7;">Zero submission</div>
+                <div style="font-size:24px; font-weight:600;" id="reminderCountZero">—</div>
+              </div>
+            </div>
+            <div id="reminderList"></div>
+          </div>
+        </section>
+
         <!-- WRG inline JS — fetch /api endpoints + populate KPI strip -->
         <script>
           (function () {
@@ -131,6 +159,102 @@
               $('kpiUnm').textContent      = fmtNum(unmatched);
             }
 
+            async function fetchPendingReminders(date) {
+              const r = await fetch(`/api/reminders/pending?date=${date}`);
+              if (!r.ok) throw new Error('pending failed');
+              return r.json();
+            }
+
+            let isAdmin = false;
+            let selectedTier = null; // null = collapsed; 'am' | 'todo' | 'zero'
+
+            function renderReminderList(data) {
+              const list = $('reminderList');
+              // Sync pill outline highlight to current selection
+              document.querySelectorAll('.reminder-pill').forEach((p) => {
+                p.style.outline = (p.dataset.tier === selectedTier) ? '2px solid currentColor' : 'none';
+              });
+              if (selectedTier === null) {
+                list.innerHTML = '';
+                return;
+              }
+              const tier = selectedTier;
+              const rows = (tier === 'am' ? data.am_pending :
+                            tier === 'todo' ? data.todo_pending :
+                            data.zero_submission) || [];
+              if (rows.length === 0) {
+                list.innerHTML = `<div style="padding:16px; text-align:center; opacity:0.6; font-size:13px;">✅ Tier ${tier.toUpperCase()} bersih — semua reported</div>`;
+                return;
+              }
+              const html = rows.map((r) => {
+                const meta = tier === 'am'
+                  ? `${r.pending}/${r.total} visit pending`
+                  : tier === 'todo'
+                  ? `${r.pending} item · ${r.role}`
+                  : `tidak ada plan/todo · ${r.role}`;
+                const pushBtn = isAdmin
+                  ? `<button class="btn btn--ghost reminder-push" data-user="${r.id}" data-tier="${tier}" style="font-size:12px; padding:4px 10px;">📲 Push WA</button>`
+                  : '';
+                return `<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--border); gap:8px;">
+                  <div style="flex:1;">
+                    <div style="font-weight:500;">${r.panggilan || r.nama}</div>
+                    <div style="font-size:11px; opacity:0.7;">${r.cabang || '—'} · ${meta}</div>
+                  </div>
+                  ${pushBtn}
+                </div>`;
+              }).join('');
+              list.innerHTML = html;
+              // Wire push buttons
+              list.querySelectorAll('.reminder-push').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                  const uid = parseInt(btn.dataset.user, 10);
+                  const t = btn.dataset.tier;
+                  if (!confirm(`Kirim WA reminder ke user ${uid}?`)) return;
+                  btn.disabled = true; btn.textContent = '⏳ Sending...';
+                  try {
+                    const r = await fetch('/api/reminders/push', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ user_id: uid, tier: t }),
+                    });
+                    const j = await r.json();
+                    if (j.ok) {
+                      btn.textContent = '✅ Sent';
+                      btn.style.background = 'rgba(34,197,94,0.2)';
+                    } else {
+                      btn.textContent = '❌ Failed';
+                      btn.disabled = false;
+                      alert('Push gagal: ' + (j.error || JSON.stringify(j)));
+                    }
+                  } catch (e) {
+                    btn.textContent = '❌ Error';
+                    btn.disabled = false;
+                    alert('Push error: ' + e.message);
+                  }
+                });
+              });
+            }
+
+            async function refreshReminders() {
+              try {
+                const today = new Date().toISOString().slice(0, 10);
+                const data = await fetchPendingReminders(today);
+                const amN = (data.am_pending || []).length;
+                const todoN = (data.todo_pending || []).length;
+                const zeroN = (data.zero_submission || []).length;
+                $('reminderCountAm').textContent = amN;
+                $('reminderCountTodo').textContent = todoN;
+                $('reminderCountZero').textContent = zeroN;
+                $('reminderTitle').textContent = `Belum Report Hari Ini · ${today}`;
+                const card = $('reminderPendingCard');
+                card.style.display = (amN + todoN + zeroN) > 0 ? '' : 'none';
+                window._reminderData = data;
+                renderReminderList(data);
+              } catch (e) {
+                console.warn('reminder fetch failed:', e);
+              }
+            }
+
             async function refresh() {
               try {
                 const env = await fetchEnv();
@@ -144,8 +268,16 @@
                 $('heroRange').textContent = `${state.from} → ${state.to}`;
                 $('heroDate').textContent = new Date(env.today).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
+                // Check admin role for push button
+                try {
+                  const me = await fetch('/api/auth/me').then((r) => r.json());
+                  isAdmin = !!(me.user && me.user.is_admin);
+                } catch (e) { isAdmin = false; }
+
                 const sum = await fetchSummary(state.from, state.to);
                 renderKpi(sum.summary || {});
+
+                refreshReminders();
               } catch (e) {
                 console.error('WRG refresh failed:', e);
                 $('heroSub').textContent = 'Gagal load data: ' + e.message;
@@ -153,6 +285,22 @@
             }
 
             document.addEventListener('DOMContentLoaded', () => {
+              // Reminder card: tier pill click → toggle (same tier collapses, different tier switches)
+              document.querySelectorAll('.reminder-pill').forEach((p) => {
+                p.addEventListener('click', () => {
+                  selectedTier = (selectedTier === p.dataset.tier) ? null : p.dataset.tier;
+                  if (window._reminderData) renderReminderList(window._reminderData);
+                });
+              });
+              // Collapse toggle
+              const tog = $('reminderToggle');
+              if (tog) tog.addEventListener('click', () => {
+                const body = $('reminderBody');
+                const hidden = body.style.display === 'none';
+                body.style.display = hidden ? '' : 'none';
+                tog.textContent = hidden ? 'Sembunyikan' : 'Tampilkan';
+              });
+
               $('btnApply').addEventListener('click', () => {
                 state.from = $('dateFrom').value;
                 state.to = $('dateTo').value;

@@ -306,6 +306,60 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 """, env=env2)
                 return json_response(self, {"env": env2, "rows": data or []})
 
+            # Pending-report reminder widget: 3-tier list untuk dashboard top card.
+            # ?date=YYYY-MM-DD (default = today)
+            if path == "/api/reminders/pending":
+                env2 = parse_env(qs)
+                d = (qs.get("date") or [""])[0]
+                if not d:
+                    d = psql_json("SELECT to_json((CURRENT_DATE)::text);", env=env2)
+                if not valid_date(d):
+                    return json_response(self, {"error": "invalid date"}, 400)
+                am_pending = psql_json(f"""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.pending DESC, t.nama), '[]'::json)
+                    FROM (
+                      WITH agg AS (
+                        SELECT sp.user_id, sp.id AS plan_id,
+                          BOOL_OR(al.id IS NOT NULL) AS has_report
+                        FROM sales_plan sp LEFT JOIN activity_log al ON al.plan_id = sp.id
+                        WHERE sp.tanggal = '{d}' GROUP BY sp.user_id, sp.id
+                      )
+                      SELECT mu.id, mu.nama, mu.panggilan, mu.cabang, mu.wa_number, mu.last_active_group,
+                        COUNT(*) FILTER (WHERE NOT has_report) AS pending,
+                        COUNT(*) AS total
+                      FROM agg JOIN master_user mu ON mu.id = agg.user_id
+                      WHERE mu.wajib_plan_report=TRUE AND mu.aktif=TRUE AND mu.role='AM'
+                      GROUP BY mu.id, mu.nama, mu.panggilan, mu.cabang, mu.wa_number, mu.last_active_group
+                      HAVING COUNT(*) FILTER (WHERE NOT has_report) > 0
+                    ) t;
+                """, env=env2)
+                todo_pending = psql_json(f"""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role, t.nama), '[]'::json)
+                    FROM (
+                      SELECT mu.id, mu.nama, mu.panggilan, mu.role, mu.cabang, mu.wa_number, mu.last_active_group,
+                        st.total_items AS pending
+                      FROM sales_todo st JOIN master_user mu ON mu.id = st.user_id
+                      WHERE st.tanggal='{d}' AND NOT st.reported
+                        AND mu.wajib_plan_report=TRUE AND mu.aktif=TRUE
+                    ) t;
+                """, env=env2)
+                zero_submission = psql_json(f"""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.role, t.nama), '[]'::json)
+                    FROM (
+                      SELECT mu.id, mu.nama, mu.panggilan, mu.role, mu.cabang, mu.wa_number, mu.last_active_group
+                      FROM master_user mu
+                      WHERE mu.wajib_plan_report=TRUE AND mu.aktif=TRUE
+                        AND NOT EXISTS(SELECT 1 FROM sales_plan sp WHERE sp.user_id=mu.id AND sp.tanggal='{d}')
+                        AND NOT EXISTS(SELECT 1 FROM sales_todo st WHERE st.user_id=mu.id AND st.tanggal='{d}')
+                    ) t;
+                """, env=env2)
+                return json_response(self, {
+                    "env": env2, "date": d,
+                    "am_pending": am_pending or [],
+                    "todo_pending": todo_pending or [],
+                    "zero_submission": zero_submission or [],
+                })
+
             # AM reminders dalam range tanggal (untuk sales calendar pills).
             # ?from=YYYY-MM-DD&to=YYYY-MM-DD
             if path == "/api/reminders":
@@ -500,6 +554,56 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 """
                 row = psql_exec(sql, env=env)
                 return json_response(self, {"upserted": row}, 201)
+
+            # POST /api/reminders/push — kirim WA reminder ke user yg belum report.
+            # Body: { user_id, tier: 'am'|'todo'|'zero', message?: '...' (optional custom) }
+            # Target: last_active_group jika ada, else wa_number@s.whatsapp.net
+            if path == "/api/reminders/push" and body:
+                uid = body.get("user_id")
+                tier = (body.get("tier") or "").lower()
+                custom_msg = (body.get("message") or "").strip()
+                if not (isinstance(uid, int) and tier in ("am", "todo", "zero")):
+                    return json_response(self, {"error": "user_id (int) + tier (am|todo|zero) required"}, 400)
+                u = psql_json(
+                    f"SELECT row_to_json(t) FROM ("
+                    f"  SELECT id, nama, panggilan, role, cabang, wa_number, last_active_group "
+                    f"  FROM master_user WHERE id={int(uid)} AND aktif AND wajib_plan_report LIMIT 1"
+                    f") t;",
+                    env=env,
+                )
+                if not u:
+                    return json_response(self, {"error": "user not found / not wajib"}, 404)
+                # Build default msg
+                panggilan = u.get("panggilan") or u.get("nama") or "rekan"
+                if custom_msg:
+                    msg = custom_msg
+                elif tier == "am":
+                    msg = (f"⏰ Reminder {panggilan}\n\n"
+                           f"Lo masih ada visit yg belum di-#REPORT hari ini. "
+                           f"Mohon segera kirim ke grup yaa biar plan ke-trace 🙏")
+                elif tier == "todo":
+                    msg = (f"⏰ Reminder {panggilan}\n\n"
+                           f"Lo udah submit #PLAN hari ini tapi belum #REPORT. "
+                           f"Mohon update report-nya yaa 🙏")
+                else:  # zero
+                    msg = (f"⏰ Reminder {panggilan}\n\n"
+                           f"Hari ini belum ada #PLAN dari lo. Mohon kirim plan + report harian sebelum jam akhir kerja 🙏")
+                # Target JID: prefer last_active_group, fallback to private DM
+                target = u.get("last_active_group") or f"{u['wa_number']}@s.whatsapp.net"
+                # Spawn wa_send via config helper. config.sh sources wa_send fn.
+                import subprocess
+                cfg = "/Users/development/Documents/wrg-crm/config/config.sh"
+                shell_cmd = f'source "{cfg}" && wa_send "{target}" "$1"'
+                result = subprocess.run(
+                    ["bash", "-c", shell_cmd, "--", msg],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if result.returncode == 0:
+                    return json_response(self, {"ok": True, "target": target, "user": u, "message": msg})
+                return json_response(self, {
+                    "ok": False, "error": "wa_send failed",
+                    "stderr": result.stderr[-500:], "target": target,
+                }, 502)
 
             return json_response(self, {"error": "endpoint not supported via POST"}, 404)
 
