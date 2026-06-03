@@ -11,6 +11,7 @@ const titles = {
   'users': 'WRG CRM · Manage Users',
   'drilldown': 'WRG CRM · Detail Plan & Report',
   'sales-calendar': 'WRG CRM · Sales Calendar',
+  'sales-day': 'WRG CRM · Sales Day Summary',
   // Adminator demo pages (kept for now as reference, may be removed later)
   'email': 'Adminator · Email',
   'calendar': 'Adminator · Calendar',

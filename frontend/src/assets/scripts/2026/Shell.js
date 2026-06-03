@@ -293,7 +293,7 @@ export function mountShell() {
 
   // Auth bootstrap — WRG pages (Adminator demo pages bypass).
   // Skip on login page itself. Check /api/auth/me, redirect to login if 401.
-  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users', 'drilldown', 'sales-calendar'].includes(activeKey);
+  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users', 'drilldown', 'sales-calendar', 'sales-day'].includes(activeKey);
   if (isWrgPage) {
     fetch('/api/auth/me')
       .then((r) => r.ok ? r.json() : null)
