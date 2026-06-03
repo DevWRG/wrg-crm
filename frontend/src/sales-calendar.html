@@ -108,8 +108,12 @@
             let cache = {}; // by `${user_id}_${from}_${to}` → drilldown plans
             let holidays = []; // [{tanggal, keterangan}]
 
-            function fmtDate(d) { return d.toISOString().slice(0,10); }
             function pad(n) { return n.toString().padStart(2,'0'); }
+            function fmtDate(d) {
+              // Local date (not UTC) — WIB UTC+7, toISOString shifts back to UTC
+              // and breaks tanggal lookups (DB stores DATE as local).
+              return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+            }
             function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
             function startOfWeek(d) { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return x; }
 
