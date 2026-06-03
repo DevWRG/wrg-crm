@@ -74,7 +74,8 @@
             <div class="card-head">
               <div class="card-title-wrap">
                 <span class="eyebrow">Unmatched</span>
-                <h2 class="card-title" style="color:#dc2626;">Aktivitas di luar plan <span id="actCount" style="color:#94a3b8; font-weight:400; font-size:14px;"></span></h2>
+                <h2 class="card-title" style="color:#dc2626;">*update — Aktivitas di luar plan <span id="actCount" style="color:#94a3b8; font-weight:400; font-size:14px;"></span></h2>
+                <p style="margin:4px 0 0; font-size:12px; color:#64748b;">Plan berubah saat eksekusi: customer yang di-visit tidak ada di #PLAN pagi.</p>
               </div>
             </div>
             <div id="actTable"></div>
@@ -227,20 +228,22 @@
                   }).join('');
               }
 
-              // Unmatched activity
+              // Unmatched activity = *update marker (plan changed mid-execution)
               if (actRows.length > 0) {
                 $('actSection').style.display = '';
                 $('actCount').textContent = `(${actRows.length})`;
                 $('actTable').innerHTML = `<div style="overflow-x:auto;"><table style="width:100%; font-size:12px; border-collapse:collapse;">
                     <thead><tr style="background:#fef2f2;">
                       <th style="padding:8px 10px; text-align:left;">Tgl</th>
-                      <th style="padding:8px 10px; text-align:left;">Customer</th>
+                      <th style="padding:8px 10px; text-align:left;">Tag</th>
+                      <th style="padding:8px 10px; text-align:left;">Customer (visit aktual)</th>
                       <th style="padding:8px 10px; text-align:left;">Hasil</th>
                       <th style="padding:8px 10px; text-align:left;">Next</th>
                     </tr></thead><tbody>
                     ${actRows.map((a) => `
                       <tr style="border-top:1px solid #fee2e2;">
                         <td style="padding:8px 10px;">${fmtDate(a.tanggal)}</td>
+                        <td style="padding:8px 10px;"><span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600;">*update</span></td>
                         <td style="padding:8px 10px;"><strong>${escapeHtml(a.customer_name)}</strong></td>
                         <td style="padding:8px 10px;">${escapeHtml(a.hasil || '—')}</td>
                         <td style="padding:8px 10px; color:#64748b;">${escapeHtml(a.next_action || '—')}</td>
