@@ -134,11 +134,27 @@ def main():
         # Capture greedy cluster of digits/dot/comma/space between Lat..Long,
         # then strip whitespace dlm repair_coord.
         m = re.search(r'Lat[^0-9\-]*(-?[\d.,\s]+?)[\s°]*(?:Long|Lon|Lng)[^0-9\-]*(-?[\d.,]+)°?', text, re.I)
+        # D) "8.058290°S, 111.704704°E" — degree+hemisphere (no Lat/Long keyword)
+        nsew_match = None
         if not m:
+            nsew_match = re.search(r'(\d+[.,]\d+)\s*°\s*([NS])\s*,?\s*(\d+[.,]\d+)\s*°\s*([EW])', text, re.I)
+        if not m and not nsew_match:
             m = re.search(r'(-?\d+[.,]\d{3,})\s*°[°,\s]+(-?\d+[.,]\d{3,})\s*°?', text)
-        if not m:
+        if not m and not nsew_match:
             m = re.search(r'(-?\d+[.,]\d{4,})[\s,]+(-?\d+[.,]\d{4,})', text)
-        if m:
+        if nsew_match:
+            try:
+                lat = float(nsew_match.group(1).replace(',', '.'))
+                lon = float(nsew_match.group(3).replace(',', '.'))
+                if nsew_match.group(2).upper() == 'S': lat = -lat
+                if nsew_match.group(4).upper() == 'W': lon = -lon
+                if -11 <= lat <= 6 and 95 <= lon <= 141:
+                    result["has_geotag"] = True
+                    result["lat"] = lat
+                    result["lon"] = lon
+            except ValueError:
+                pass
+        elif m:
             try:
                 lat = repair_coord(m.group(1), 'lat')
                 lon = repair_coord(m.group(2), 'lon')
