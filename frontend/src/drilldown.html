@@ -155,24 +155,46 @@
                         <th style="padding:8px 10px; text-align:left;">Next</th>
                         <th style="padding:8px 10px; text-align:left;">Visit Geotag</th>
                       </tr></thead><tbody>
-                      ${planRows.map((p) => {
+                      ${(() => {
+                        // Extract "Substitusi kunjungan dari [customer]" mentions
+                        // dari hasil/next *update rows → mark plan sebagai substituted.
+                        const substitutedNames = new Set();
+                        (actRows || []).forEach((a) => {
+                          const text = (a.hasil || '') + ' ' + (a.next_action || '');
+                          const re = /substitusi(?:\s+kunjungan)?\s+(?:dari|untuk|menggantikan)\s+([^.,;\n]+)/gi;
+                          let m;
+                          while ((m = re.exec(text)) !== null) {
+                            substitutedNames.add(m[1].trim().toLowerCase());
+                          }
+                        });
+                        return planRows.map((p) => {
                         const visitCell = p.visit_lat && p.visit_lon
                           ? `<a href="https://www.google.com/maps?q=${p.visit_lat},${p.visit_lon}" target="_blank">📍 ${p.visit_lat}, ${p.visit_lon}</a>`
                             + (p.visit_timestamp ? `<div style="font-size:10px; color:#94a3b8;">${escapeHtml(String(p.visit_timestamp).replace('T',' ').slice(0,16))}</div>` : '')
                             + (p.visit_date_mismatch ? `<div style="margin-top:2px;">${badge('⚠️ tanggal mismatch', '#dc2626')}</div>` : '')
                           : (p.reported ? '<span style="color:#dc2626; font-size:11px;">⚠️ no geotag</span>' : '<span style="color:#94a3b8;">—</span>');
+                        // Check if this plan substituted oleh *update row
+                        const isSubstituted = !p.reported && (
+                          substitutedNames.has((p.customer_name || '').toLowerCase()) ||
+                          [...substitutedNames].some((n) => n.includes((p.customer_name || '').toLowerCase()) || (p.customer_name || '').toLowerCase().includes(n))
+                        );
+                        let statusBadge;
+                        if (p.reported) statusBadge = badge('reported', '#16a34a');
+                        else if (isSubstituted) statusBadge = badge('substituted *update', '#f59e0b');
+                        else if (p.is_late_plan) statusBadge = badge('late', '#dc2626');
+                        else statusBadge = badge('pending', '#94a3b8');
                         return `
-                        <tr style="border-top:1px solid #f1f5f9;">
+                        <tr style="border-top:1px solid #f1f5f9;${isSubstituted ? ' background:#fefce8;' : ''}">
                           <td style="padding:8px 10px; white-space:nowrap;">${fmtDate(p.tanggal)}</td>
                           <td style="padding:8px 10px;"><strong>${escapeHtml(p.customer_name)}</strong></td>
                           <td style="padding:8px 10px;">${escapeHtml(p.tujuan || '—')}</td>
                           <td style="padding:8px 10px; color:#64748b;">${escapeHtml(p.goal || '—')}</td>
-                          <td style="padding:8px 10px; text-align:center;">${p.reported ? badge('reported', '#16a34a') : (p.is_late_plan ? badge('late', '#dc2626') : badge('pending', '#94a3b8'))}</td>
+                          <td style="padding:8px 10px; text-align:center;">${statusBadge}</td>
                           <td style="padding:8px 10px; font-size:11px; color:#475569;">${escapeHtml(p.hasil || '—')}</td>
                           <td style="padding:8px 10px; font-size:11px; color:#475569;">${escapeHtml(p.next_action || '—')}</td>
                           <td style="padding:8px 10px; font-size:11px;">${visitCell}</td>
                         </tr>`;
-                      }).join('')}
+                      }).join('')})()}
                       ${(actRows || []).filter((a) => isAM).map((a) => `
                         <tr style="border-top:1px solid #fef3c7; background:#fffbeb;">
                           <td style="padding:8px 10px; white-space:nowrap;">${fmtDate(a.tanggal)}</td>
