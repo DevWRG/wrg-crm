@@ -590,18 +590,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            f"Hari ini belum ada #PLAN dari lo. Mohon kirim plan + report harian sebelum jam akhir kerja 🙏")
                 # Target JID: prefer last_active_group, fallback to private DM
                 target = u.get("last_active_group") or f"{u['wa_number']}@s.whatsapp.net"
-                # Spawn wa_send via config helper. config.sh sources wa_send fn.
+                # Call openclaw directly — avoid sourcing config.sh from Documents/
+                # (TCC blocks dashboard process reading Documents/). Absolute path
+                # + PATH override required karena launchd PATH gak include
+                # /opt/homebrew/bin (openclaw shebang `env node` butuh node di PATH).
                 import subprocess
-                cfg = "/Users/development/Documents/wrg-crm/config/config.sh"
-                shell_cmd = f'source "{cfg}" && wa_send "{target}" "$1"'
+                openclaw_bin = "/opt/homebrew/bin/openclaw"
+                env_overlay = {**os.environ, "PATH": f"/opt/homebrew/bin:{os.environ.get('PATH', '')}"}
                 result = subprocess.run(
-                    ["bash", "-c", shell_cmd, "--", msg],
+                    [openclaw_bin, "message", "send",
+                     "--channel", "whatsapp",
+                     "--target", target,
+                     "--message", msg],
                     capture_output=True, text=True, timeout=30,
+                    env=env_overlay,
                 )
                 if result.returncode == 0:
                     return json_response(self, {"ok": True, "target": target, "user": u, "message": msg})
                 return json_response(self, {
-                    "ok": False, "error": "wa_send failed",
+                    "ok": False, "error": "openclaw send failed",
                     "stderr": result.stderr[-500:], "target": target,
                 }, 502)
 
