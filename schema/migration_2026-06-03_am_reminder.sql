@@ -21,3 +21,6 @@ CREATE INDEX IF NOT EXISTS idx_am_reminder_tgl
 
 CREATE INDEX IF NOT EXISTS idx_am_reminder_user
     ON am_reminder (user_id, tanggal_reminder DESC);
+
+GRANT ALL ON am_reminder TO wrg_admin;
+GRANT USAGE, SELECT ON SEQUENCE am_reminder_id_seq TO wrg_admin;
