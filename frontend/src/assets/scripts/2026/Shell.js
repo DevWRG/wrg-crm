@@ -270,7 +270,7 @@ function renderTopbar(crumbsAttr) {
 function renderFooter() {
   return `
     <footer class="d-footer">
-      <div>© 2026 · Designed by <a href="https://colorlib.com" target="_blank" rel="nofollow noopener noreferrer">Colorlib</a></div>
+      <div>© 2026 · Designed by MH — BD — Lifeline</div>
       <div class="d-footer-meta">
         <span>v4.1.5</span>
         <span>preview build</span>
