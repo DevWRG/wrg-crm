@@ -133,7 +133,7 @@ def main():
         # `Lat-7. 624698 Long 111.494828` — OCR split decimal cluster.
         # Capture greedy cluster of digits/dot/comma/space between Lat..Long,
         # then strip whitespace dlm repair_coord.
-        m = re.search(r'Lat[^0-9\-]*(-?[\d.,\s]+?)\s*(?:Long|Lon|Lng)[^0-9\-]*(-?[\d.,]+)', text, re.I)
+        m = re.search(r'Lat[^0-9\-]*(-?[\d.,\s]+?)[\s°]*(?:Long|Lon|Lng)[^0-9\-]*(-?[\d.,]+)°?', text, re.I)
         if not m:
             m = re.search(r'(-?\d+[.,]\d{3,})\s*°[°,\s]+(-?\d+[.,]\d{3,})\s*°?', text)
         if not m:
@@ -149,23 +149,29 @@ def main():
             except ValueError:
                 pass
 
-        # Timestamp: "2026/05/30 21:46" or "31/05/2026, 00:44"
+        # Timestamp: "2026/05/30 21:46" / "31/05/2026, 00:44" / "03/6/2026 03:36 PM"
         # Normalize ke ISO 'YYYY-MM-DD HH:MM' di timestamp_iso (Postgres parseable).
         import datetime
         result["timestamp_iso"] = None
-        mt = re.search(r'(\d{4})/(\d{2})/(\d{2})\s+(\d{2}):(\d{2})', text)
+        mt = re.search(r'(\d{4})/(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})', text)
         if mt:
-            result["timestamp"] = f"{mt.group(1)}/{mt.group(2)}/{mt.group(3)} {mt.group(4)}:{mt.group(5)}"
+            y, mo, d, hh, mm = mt.group(1), mt.group(2), mt.group(3), mt.group(4), mt.group(5)
+            result["timestamp"] = f"{y}/{int(mo):02d}/{int(d):02d} {int(hh):02d}:{mm}"
             try:
-                result["timestamp_iso"] = f"{mt.group(1)}-{mt.group(2)}-{mt.group(3)} {mt.group(4)}:{mt.group(5)}:00"
+                result["timestamp_iso"] = f"{y}-{int(mo):02d}-{int(d):02d} {int(hh):02d}:{mm}:00"
             except ValueError:
                 pass
         else:
-            mt = re.search(r'(\d{2})/(\d{2})/(\d{4}),?\s+(\d{2}):(\d{2})', text)
+            # dd/m/yyyy with optional AM/PM
+            mt = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4}),?\s+(\d{1,2}):(\d{2})\s*(AM|PM)?', text, re.I)
             if mt:
-                result["timestamp"] = f"{mt.group(1)}/{mt.group(2)}/{mt.group(3)} {mt.group(4)}:{mt.group(5)}"
+                d, mo, y, hh, mm, ampm = mt.group(1), mt.group(2), mt.group(3), int(mt.group(4)), mt.group(5), mt.group(6)
+                if ampm:
+                    if ampm.upper() == 'PM' and hh < 12: hh += 12
+                    elif ampm.upper() == 'AM' and hh == 12: hh = 0
+                result["timestamp"] = f"{int(d):02d}/{int(mo):02d}/{y} {hh:02d}:{mm}"
                 try:
-                    result["timestamp_iso"] = f"{mt.group(3)}-{mt.group(2)}-{mt.group(1)} {mt.group(4)}:{mt.group(5)}:00"
+                    result["timestamp_iso"] = f"{y}-{int(mo):02d}-{int(d):02d} {hh:02d}:{mm}:00"
                 except ValueError:
                     pass
 
