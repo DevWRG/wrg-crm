@@ -319,7 +319,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     FROM (
                       SELECT ar.id, ar.user_id, mu.panggilan, mu.cabang,
                              ar.tanggal_reminder::text AS tanggal_reminder,
-                             ar.keterangan, ar.source_report_date::text AS source_report_date,
+                             ar.keterangan, ar.customer_name,
+                             ar.source_report_date::text AS source_report_date,
                              ar.fired_h_minus_1, ar.fired_h
                       FROM am_reminder ar
                       JOIN master_user mu ON mu.id = ar.user_id

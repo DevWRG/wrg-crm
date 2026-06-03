@@ -80,6 +80,7 @@
                   <tr>
                     <th>AM</th>
                     <th>Cabang</th>
+                    <th>Customer</th>
                     <th>Keterangan</th>
                     <th>Dari Report</th>
                     <th>Status fire</th>
@@ -202,6 +203,7 @@
                         <tr style="background:#fff1f2;">
                           <td><strong>📌 ${escapeHtml(r.panggilan)}</strong></td>
                           <td>${escapeHtml(r.cabang || '-')}</td>
+                          <td>${r.customer_name ? `<strong>${escapeHtml(r.customer_name)}</strong>` : '<span style="color:#94a3b8;">—</span>'}</td>
                           <td>${escapeHtml(r.keterangan)}</td>
                           <td style="font-size:11px; color:#94a3b8;">${escapeHtml(r.source_report_date || '-')}</td>
                           <td>${fireStatus.join(' ')}</td>

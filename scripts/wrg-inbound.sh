@@ -970,12 +970,62 @@ if mm:
 ⚠️ Note diabaikan: tanggal $N_TGL sudah lewat."
         continue
       fi
-      local SAFE_KET
+      # Auto-detect customer: extract numbered customer headers dari body
+      # report ("1. RS Mitra Keluarga", "2. Lab Prodia Surabaya", ...), lalu
+      # fuzzy match keterangan note ke list itu. Best match (sim ≥ 0.20) →
+      # customer_name. Kalau ga match → NULL.
+      local SAFE_KET N_CUST
       SAFE_KET=$(echo "$N_KET" | sed "s/'/''/g")
-      $PSQL -c "INSERT INTO am_reminder (user_id, tanggal_reminder, keterangan, created_msg_id, source_report_date) VALUES ($USER_ID, '$N_TGL', '$SAFE_KET', '$MSG_ID', '$TGL_ISO');" >/dev/null 2>>"$LOG_DIR/daily.log"
-      log "  #REPORT AM note: user=$USER_ID tgl=$N_TGL ket='${N_KET:0:60}'"
+      N_CUST=$(printf '%s\n###KET###\n%s' "$BODY" "$N_KET" | python3 -c '
+import sys, re
+parts = sys.stdin.read().split("###KET###")
+body, ket = parts[0], parts[1].strip().lower() if len(parts) > 1 else ""
+if not ket: sys.exit(0)
+# Extract numbered customer headers
+customers = []
+for line in body.splitlines():
+    m = re.match(r"^\s*[0-9]+[.):]\s*([^|/\n]{2,80}?)(\s*[|/]|$)", line)
+    if m:
+        cust = m.group(1).strip()
+        # Strip *update prefix
+        cust = re.sub(r"^\*\s*update\s+", "", cust, flags=re.I).strip()
+        if cust:
+            customers.append(cust)
+if not customers: sys.exit(0)
+# Fuzzy: count overlapping tokens between ket and each customer
+STOP = {"visit", "kunjungan", "fisik", "follow", "fwup", "next", "hasil",
+        "untuk", "dari", "deal", "closing", "yang", "dan", "atau", "kepada",
+        "akan", "selesai", "tunggu", "report", "the", "with", "ulang"}
+def tokens(s):
+    return set(t for t in re.findall(r"[a-zA-Z]{3,}", s.lower()) if t not in STOP)
+ket_toks = tokens(ket)
+best = ("", 0.0)
+for c in customers:
+    c_toks = tokens(c)
+    if not c_toks or not ket_toks: continue
+    overlap = len(ket_toks & c_toks)
+    if not overlap: continue
+    # Max coverage of either side — handles short ket vs long cust + vice versa
+    score = max(overlap / len(c_toks), overlap / len(ket_toks))
+    if score > best[1]:
+        best = (c, score)
+if best[1] >= 0.4:
+    print(best[0])
+' 2>/dev/null)
+      local CUST_SQL
+      if [ -n "$N_CUST" ]; then
+        local SAFE_CUST
+        SAFE_CUST=$(echo "$N_CUST" | sed "s/'/''/g")
+        CUST_SQL="'$SAFE_CUST'"
+      else
+        CUST_SQL="NULL"
+      fi
+      $PSQL -c "INSERT INTO am_reminder (user_id, tanggal_reminder, keterangan, customer_name, created_msg_id, source_report_date) VALUES ($USER_ID, '$N_TGL', '$SAFE_KET', $CUST_SQL, '$MSG_ID', '$TGL_ISO');" >/dev/null 2>>"$LOG_DIR/daily.log"
+      log "  #REPORT AM note: user=$USER_ID tgl=$N_TGL cust='${N_CUST}' ket='${N_KET:0:60}'"
+      local CUST_LABEL=""
+      [ -n "$N_CUST" ] && CUST_LABEL=" (${N_CUST})"
       NOTES_REPLY="${NOTES_REPLY}
-📌 Note tercatat: $N_TGL — ${N_KET}"
+📌 Note tercatat: $N_TGL${CUST_LABEL} — ${N_KET}"
     fi
   done <<< "$(printf '%s' "$BODY" | grep -iE '^[[:space:]]*note[[:space:]]*:')"
 
