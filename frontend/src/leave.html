@@ -140,7 +140,8 @@
                   <td style="padding:8px; border-bottom:1px solid #f1f5f9;"><span style="background:#ddd6fe; color:#5b21b6; padding:2px 8px; border-radius:6px; font-size:11px;">${escapeHtml(row.jenis)}</span></td>
                   <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#64748b;">${escapeHtml(row.keterangan || '')}</td>
                   <td style="padding:8px; border-bottom:1px solid #f1f5f9; font-size:11px; color:#94a3b8;">${escapeHtml((row.created_at || '').slice(0, 16))}</td>
-                  <td style="padding:8px; border-bottom:1px solid #f1f5f9; text-align:right;">
+                  <td style="padding:8px; border-bottom:1px solid #f1f5f9; text-align:right; white-space:nowrap;">
+                    <button class="btn btn--ghost" onclick='editLeave(${JSON.stringify(row)})' style="font-size:11px; color:#0e7490; margin-right:4px;">Edit</button>
                     <button class="btn btn--ghost" onclick="deleteLeave(${row.id})" style="font-size:11px; color:#dc2626;">Delete</button>
                   </td>
                 </tr>
@@ -152,6 +153,63 @@
               const r = await fetch(`/api/leave/${id}`, { method: 'DELETE' });
               if (r.ok) { loadLeaves(); }
               else { alert('Gagal hapus: ' + r.status); }
+            };
+
+            window.editLeave = (row) => {
+              // Inline modal — adjust extent cuti/ijin/sakit
+              const html = `
+                <div id="editModal" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+                  <div style="background:#fff; border-radius:8px; padding:24px; width:480px; max-width:90vw;">
+                    <h3 style="margin:0 0 16px;">Edit Ijin — ${escapeHtml(row.panggilan || row.nama)}</h3>
+                    <div style="display:flex; flex-direction:column; gap:12px;">
+                      <div>
+                        <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Mulai</label>
+                        <input id="editStart" type="date" class="input" value="${row.start_date}" style="width:100%; height:40px;">
+                      </div>
+                      <div>
+                        <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Sampai (extend di sini)</label>
+                        <input id="editEnd" type="date" class="input" value="${row.end_date}" style="width:100%; height:40px;">
+                      </div>
+                      <div>
+                        <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Jenis</label>
+                        <select id="editJenis" class="select" style="width:100%; height:40px;">
+                          <option value="sakit"${row.jenis==='sakit'?' selected':''}>sakit</option>
+                          <option value="cuti"${row.jenis==='cuti'?' selected':''}>cuti</option>
+                          <option value="ijin"${row.jenis==='ijin'?' selected':''}>ijin</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="display:block; font-size:12px; color:#64748b; margin-bottom:4px;">Keterangan</label>
+                        <input id="editKet" type="text" class="input" value="${escapeHtml(row.keterangan || '')}" style="width:100%; height:40px;">
+                      </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px;">
+                      <button class="btn btn--ghost" onclick="document.getElementById('editModal').remove()">Cancel</button>
+                      <button class="btn btn--primary" id="editSave">Simpan</button>
+                    </div>
+                  </div>
+                </div>`;
+              document.body.insertAdjacentHTML('beforeend', html);
+              document.getElementById('editSave').addEventListener('click', async () => {
+                const body = {
+                  start_date: document.getElementById('editStart').value,
+                  end_date: document.getElementById('editEnd').value,
+                  jenis: document.getElementById('editJenis').value,
+                  keterangan: document.getElementById('editKet').value,
+                };
+                const r = await fetch(`/api/leave/${row.id}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(body),
+                });
+                if (r.ok) {
+                  document.getElementById('editModal').remove();
+                  loadLeaves();
+                } else {
+                  const err = await r.json().catch(() => ({}));
+                  alert('Gagal: ' + (err.error || r.status));
+                }
+              });
             };
 
             $('leaveForm').addEventListener('submit', async (e) => {
