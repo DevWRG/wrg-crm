@@ -261,7 +261,7 @@
 
                 const drillUrl = amFilter
                   ? `/drilldown.html?user_id=${amFilter}&from=${ds}&to=${ds}`
-                  : `/?from=${ds}&to=${ds}`;
+                  : `/sales-day.html?date=${ds}`;
 
                 cells.push(`<div class="${classes.join(' ')}" onclick="window.location='${drillUrl}'">
                   <div class="cal-date">${d.getDate()}</div>

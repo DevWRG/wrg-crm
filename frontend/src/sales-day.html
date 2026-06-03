@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sales Day Summary · WRG CRM</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('dash26-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+    <style>
+      .day-stat-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:14px; margin-bottom:20px; }
+      .day-stat { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; }
+      .day-stat .label { font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:0.04em; }
+      .day-stat .value { font-size:28px; font-weight:600; color:#0f172a; margin-top:4px; }
+      .day-stat .sub { font-size:11px; color:#94a3b8; margin-top:2px; }
+      .day-stat.green { border-left:3px solid #16a34a; }
+      .day-stat.amber { border-left:3px solid #f59e0b; }
+      .day-stat.red { border-left:3px solid #dc2626; }
+      .day-stat.blue { border-left:3px solid #0369a1; }
+      .am-table { width:100%; font-size:13px; border-collapse:collapse; }
+      .am-table th { background:#f8fafc; padding:10px; text-align:left; font-weight:600; border-bottom:2px solid #e2e8f0; font-size:12px; color:#64748b; text-transform:uppercase; }
+      .am-table td { padding:10px; border-bottom:1px solid #f1f5f9; }
+      .am-table tr:hover { background:#fafbfc; }
+      .am-table .progress-bar { display:inline-block; width:80px; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; vertical-align:middle; margin-right:6px; }
+      .am-table .progress-fill { height:100%; background:#16a34a; transition:width 0.3s; }
+      .badge-pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+      .badge-pill.green { background:#dcfce7; color:#166534; }
+      .badge-pill.amber { background:#fef3c7; color:#92400e; }
+      .badge-pill.red { background:#fee2e2; color:#991b1b; }
+      .badge-pill.gray { background:#f1f5f9; color:#64748b; }
+      .holiday-banner { background:#f5d0fe; color:#86198f; padding:12px 16px; border-radius:8px; margin-bottom:16px; font-weight:500; }
+    </style>
+  </head>
+  <body data-active="sales-calendar" data-crumbs="WRG CRM &gt; Sales Calendar &gt; Day">
+    <div class="shell">
+      <div data-shell-sidebar></div>
+      <div class="main">
+        <div data-shell-topbar></div>
+        <main class="content">
+
+        <section class="hero">
+          <div class="hero-text">
+            <a class="btn btn--ghost" href="/sales-calendar.html" style="margin-bottom:10px; display:inline-block;">← Calendar</a>
+            <span class="eyebrow">Sales Day Summary</span>
+            <h1 class="hero-title" id="dayTitle">—</h1>
+            <p class="hero-sub" id="daySub">—</p>
+          </div>
+          <div class="hero-actions">
+            <input type="date" id="datePicker" class="btn btn--ghost" style="padding:6px 10px;">
+            <button class="btn btn--ghost" id="navPrev">‹ Prev</button>
+            <button class="btn btn--ghost" id="navToday">Today</button>
+            <button class="btn btn--ghost" id="navNext">Next ›</button>
+          </div>
+        </section>
+
+        <div id="holidayBanner" style="display:none;"></div>
+
+        <div class="day-stat-grid" id="statGrid"></div>
+
+        <div class="grid">
+          <section class="col-12 card">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow">Per AM</span>
+                <h2 class="card-title">Detail Plan & Report</h2>
+              </div>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="am-table">
+                <thead>
+                  <tr>
+                    <th>AM</th>
+                    <th>Cabang</th>
+                    <th>Plan</th>
+                    <th>Reported</th>
+                    <th style="width:180px;">Progress</th>
+                    <th>Geotag</th>
+                    <th>Status</th>
+                    <th style="text-align:right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="amBody"><tr><td colspan="8" style="padding:24px; text-align:center; color:#94a3b8;">Memuat…</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="col-12 card" id="updateSection" style="display:none;">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow" style="color:#92400e;">*update</span>
+                <h2 class="card-title" style="color:#92400e;">Visit di luar plan</h2>
+              </div>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="am-table" id="updateTable">
+                <thead>
+                  <tr>
+                    <th>AM</th>
+                    <th>Customer (visit aktual)</th>
+                    <th>Hasil</th>
+                    <th>Next</th>
+                    <th>Geotag</th>
+                  </tr>
+                </thead>
+                <tbody id="updateBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <script>
+          (function () {
+            'use strict';
+            const $ = (id) => document.getElementById(id);
+            const escapeHtml = (s) => (s == null ? '' : String(s)).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            const pad = (n) => n.toString().padStart(2,'0');
+            const fmtDate = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+            const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+            const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+            // Get date from URL or default today
+            const urlParams = new URLSearchParams(location.search);
+            let currentDate = urlParams.get('date') || fmtDate(new Date());
+            $('datePicker').value = currentDate;
+
+            function updateUrl() {
+              const u = new URL(location);
+              u.searchParams.set('date', currentDate);
+              history.replaceState(null, '', u);
+            }
+
+            async function load() {
+              const ds = currentDate;
+              const d = new Date(ds + 'T00:00:00');
+              $('dayTitle').textContent = `${HARI[d.getDay()]}, ${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
+              $('daySub').textContent = `Summary plan & report Account Manager — ${ds}`;
+
+              // Holiday banner
+              try {
+                const hr = await fetch('/api/holidays');
+                if (hr.ok) {
+                  const hj = await hr.json();
+                  const holiday = (hj.rows || []).find((h) => h.tanggal === ds);
+                  if (holiday) {
+                    $('holidayBanner').style.display = '';
+                    $('holidayBanner').className = 'holiday-banner';
+                    $('holidayBanner').innerHTML = `⭐ <strong>Libur:</strong> ${escapeHtml(holiday.keterangan)}`;
+                  } else {
+                    $('holidayBanner').style.display = 'none';
+                  }
+                }
+              } catch (e) {}
+
+              // Get AMs
+              const ur = await fetch('/api/users');
+              const uj = await ur.json();
+              const ams = (uj.rows || []).filter((u) => u.role === 'AM' && u.aktif);
+              ams.sort((a, b) => (a.cabang || '').localeCompare(b.cabang || '') || (a.panggilan || '').localeCompare(b.panggilan || ''));
+
+              // Fetch drilldown each AM
+              const results = await Promise.all(ams.map(async (am) => {
+                try {
+                  const r = await fetch(`/api/drilldown?user_id=${am.id}&from=${ds}&to=${ds}`);
+                  if (!r.ok) return { am, plans: [], unmatched: [] };
+                  const j = await r.json();
+                  return { am, plans: j.plans || [], unmatched: j.unmatched_activity || [] };
+                } catch (e) { return { am, plans: [], unmatched: [] }; }
+              }));
+
+              // Aggregate stats
+              let totalPlan = 0, totalReported = 0, totalGeo = 0, totalLate = 0, totalUpdate = 0;
+              const amWithPlan = results.filter((r) => r.plans.length > 0).length;
+              const amComplete = results.filter((r) => r.plans.length > 0 && r.plans.every((p) => p.reported)).length;
+              results.forEach((r) => {
+                totalPlan += r.plans.length;
+                totalReported += r.plans.filter((p) => p.reported).length;
+                totalGeo += r.plans.filter((p) => p.visit_lat).length;
+                totalLate += r.plans.filter((p) => p.is_late_plan).length;
+                totalUpdate += r.unmatched.length;
+              });
+
+              const pct = totalPlan > 0 ? Math.round((totalReported / totalPlan) * 100) : 0;
+
+              // Stats cards
+              $('statGrid').innerHTML = `
+                <div class="day-stat blue"><div class="label">AM aktif</div><div class="value">${amWithPlan} / ${ams.length}</div><div class="sub">submit #PLAN hari ini</div></div>
+                <div class="day-stat green"><div class="label">Plan reported</div><div class="value">${totalReported} / ${totalPlan}</div><div class="sub">${pct}% coverage</div></div>
+                <div class="day-stat ${totalGeo > 0 ? 'green' : 'amber'}"><div class="label">Visit geotag</div><div class="value">${totalGeo} / ${totalPlan}</div><div class="sub">terverifikasi lokasi</div></div>
+                <div class="day-stat ${amComplete === amWithPlan && amWithPlan > 0 ? 'green' : 'amber'}"><div class="label">AM complete</div><div class="value">${amComplete}</div><div class="sub">7/7 reported</div></div>
+                <div class="day-stat ${totalLate > 0 ? 'red' : 'green'}"><div class="label">Late plan</div><div class="value">${totalLate}</div><div class="sub">submit > 08:00</div></div>
+                <div class="day-stat ${totalUpdate > 0 ? 'amber' : 'green'}"><div class="label">*update visits</div><div class="value">${totalUpdate}</div><div class="sub">visit di luar plan</div></div>
+              `;
+
+              // Per-AM rows
+              const rowsHtml = results.map(({ am, plans, unmatched }) => {
+                const reportedN = plans.filter((p) => p.reported).length;
+                const geoN = plans.filter((p) => p.visit_lat).length;
+                const lateN = plans.filter((p) => p.is_late_plan).length;
+                const planN = plans.length;
+                const pctAM = planN > 0 ? Math.round((reportedN / planN) * 100) : 0;
+
+                let statusBadge;
+                if (planN === 0) statusBadge = '<span class="badge-pill gray">no plan</span>';
+                else if (reportedN === planN) statusBadge = '<span class="badge-pill green">complete</span>';
+                else if (reportedN > 0) statusBadge = '<span class="badge-pill amber">partial</span>';
+                else if (lateN > 0) statusBadge = '<span class="badge-pill red">late</span>';
+                else statusBadge = '<span class="badge-pill amber">pending</span>';
+
+                const progressColor = reportedN === planN && planN > 0 ? '#16a34a' : (reportedN > 0 ? '#f59e0b' : '#cbd5e1');
+
+                return `
+                  <tr>
+                    <td><strong>${escapeHtml(am.panggilan)}</strong><div style="font-size:11px; color:#94a3b8;">${escapeHtml(am.nama || '')}</div></td>
+                    <td>${escapeHtml(am.cabang || '-')}</td>
+                    <td><strong>${planN}</strong></td>
+                    <td><strong>${reportedN}</strong></td>
+                    <td>
+                      <div class="progress-bar"><div class="progress-fill" style="width:${pctAM}%; background:${progressColor};"></div></div>
+                      <span style="font-size:11px; color:#64748b;">${pctAM}%</span>
+                    </td>
+                    <td>${geoN > 0 ? `<span class="badge-pill green">📍 ${geoN}</span>` : (planN > 0 ? '<span class="badge-pill gray">—</span>' : '—')}</td>
+                    <td>${statusBadge}</td>
+                    <td style="text-align:right;"><a class="btn btn--ghost" href="/drilldown.html?user_id=${am.id}&from=${ds}&to=${ds}" style="font-size:11px;">Drilldown →</a></td>
+                  </tr>`;
+              }).join('');
+              $('amBody').innerHTML = rowsHtml;
+
+              // *update visits aggregated
+              const updateRows = results.flatMap((r) => r.unmatched.map((u) => ({ ...u, _am: r.am })));
+              if (updateRows.length > 0) {
+                $('updateSection').style.display = '';
+                $('updateBody').innerHTML = updateRows.map((u) => `
+                  <tr>
+                    <td><strong>${escapeHtml(u._am.panggilan)}</strong> <span style="font-size:11px; color:#94a3b8;">(${escapeHtml(u._am.cabang)})</span></td>
+                    <td><strong>${escapeHtml(u.customer_name)}</strong> <span class="badge-pill amber" style="margin-left:4px;">*update</span></td>
+                    <td>${escapeHtml(u.hasil || '—')}</td>
+                    <td>${escapeHtml(u.next_action || '—')}</td>
+                    <td>—</td>
+                  </tr>`).join('');
+              } else {
+                $('updateSection').style.display = 'none';
+              }
+            }
+
+            // Nav
+            $('datePicker').addEventListener('change', (e) => {
+              currentDate = e.target.value;
+              updateUrl();
+              load();
+            });
+            $('navPrev').addEventListener('click', () => {
+              const d = new Date(currentDate + 'T00:00:00');
+              d.setDate(d.getDate() - 1);
+              currentDate = fmtDate(d);
+              $('datePicker').value = currentDate;
+              updateUrl();
+              load();
+            });
+            $('navNext').addEventListener('click', () => {
+              const d = new Date(currentDate + 'T00:00:00');
+              d.setDate(d.getDate() + 1);
+              currentDate = fmtDate(d);
+              $('datePicker').value = currentDate;
+              updateUrl();
+              load();
+            });
+            $('navToday').addEventListener('click', () => {
+              currentDate = fmtDate(new Date());
+              $('datePicker').value = currentDate;
+              updateUrl();
+              load();
+            });
+
+            load();
+          })();
+        </script>
+
+        </main>
+        <div data-shell-footer></div>
+      </div>
+    </div>
+  </body>
+</html>
