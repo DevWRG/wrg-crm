@@ -120,11 +120,22 @@ def serve_static(handler, file_path: Path):
     handler.send_response(200)
     handler.send_header("Content-Type", ctype)
     handler.send_header("Content-Length", str(len(body)))
-    # Hashed asset filenames (Adminator uses content-hashed names) → safe to cache.
-    if any(part in file_path.name for part in (".", "-")) and file_path.suffix in (".js", ".css", ".woff", ".woff2", ".ttf", ".svg", ".png", ".jpg", ".jpeg", ".gif"):
+    # Cache strategy:
+    # - Fonts + images: cache 24h (rarely change)
+    # - Content-hashed JS/CSS (filename matches `name.HASH.ext` where HASH is
+    #   8+ hex chars from webpack): cache 24h
+    # - Plain JS/CSS without hash (mis. `2026.js`, `runtime.js`): no-cache
+    #   (must revalidate, otherwise browser holds old version after deploy)
+    # - HTML: no-cache always
+    name = file_path.name
+    suffix = file_path.suffix
+    has_content_hash = bool(re.search(r"\.[0-9a-f]{8,}\.", name))
+    if suffix in (".woff", ".woff2", ".ttf", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico"):
+        handler.send_header("Cache-Control", "public, max-age=86400")
+    elif suffix in (".js", ".css") and has_content_hash:
         handler.send_header("Cache-Control", "public, max-age=86400")
     else:
-        handler.send_header("Cache-Control", "no-store")
+        handler.send_header("Cache-Control", "no-cache, must-revalidate")
     handler.end_headers()
     handler.wfile.write(body)
     return True
