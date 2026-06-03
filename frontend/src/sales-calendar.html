@@ -44,6 +44,7 @@
       .cal-pill.late { background:#fee2e2; color:#991b1b; }
       .cal-pill.none { background:#f1f5f9; color:#64748b; }
       .cal-pill.am { background:#e0f2fe; color:#0369a1; }
+      .cal-pill.reminder { background:#ffe4e6; color:#9f1239; font-weight:500; }
     </style>
   </head>
   <body data-active="sales-calendar" data-crumbs="WRG CRM &gt; Sales Calendar">
@@ -107,6 +108,7 @@
             let allAMs = [];
             let cache = {}; // by `${user_id}_${from}_${to}` → drilldown plans
             let holidays = []; // [{tanggal, keterangan}]
+            let reminders = []; // [{tanggal_reminder, panggilan, keterangan}]
 
             function pad(n) { return n.toString().padStart(2,'0'); }
             function fmtDate(d) {
@@ -146,6 +148,15 @@
                 const json = await r.json();
                 holidays = json.rows || [];
               } catch (e) { console.error(e); }
+            }
+
+            async function loadReminders(from, to) {
+              try {
+                const r = await fetch(`/api/reminders?from=${from}&to=${to}`);
+                if (!r.ok) { reminders = []; return; }
+                const json = await r.json();
+                reminders = json.rows || [];
+              } catch (e) { reminders = []; }
             }
 
             async function fetchAMPlans(amId, from, to) {
@@ -202,6 +213,9 @@
                 fetchAMPlans(am.id, from, to).then((p) => p.map((x) => ({ ...x, _amId: am.id, _amName: am.panggilan, _amCab: am.cabang })))
               ))).flat();
 
+              // Fetch reminders for range
+              await loadReminders(from, to);
+
               // Group plans by date
               const byDate = {};
               allPlans.forEach((p) => {
@@ -212,6 +226,14 @@
               // Group holidays by date
               const holByDate = {};
               holidays.forEach((h) => { holByDate[h.tanggal] = h.keterangan; });
+
+              // Group reminders by date (apply same AM/cabang filter as plans)
+              const remByDate = {};
+              reminders.forEach((r) => {
+                if (amFilter && String(r.user_id) !== amFilter) return;
+                if (cabFilter && r.cabang !== cabFilter) return;
+                (remByDate[r.tanggal_reminder] = remByDate[r.tanggal_reminder] || []).push(r);
+              });
 
               // Build cells
               const cells = [];
@@ -241,6 +263,14 @@
                 let pills = '';
                 if (isHoliday) {
                   pills += `<div class="cal-pill holiday" title="${escapeHtml(holByDate[ds])}">⭐ ${escapeHtml(holByDate[ds])}</div>`;
+                }
+                // Reminders (notes) — pink/coral pill 📌
+                const dayReminders = remByDate[ds] || [];
+                dayReminders.slice(0, 3).forEach((r) => {
+                  pills += `<div class="cal-pill reminder" title="📌 ${escapeHtml(r.panggilan)} (${escapeHtml(r.cabang)}): ${escapeHtml(r.keterangan)}">📌 ${escapeHtml(r.panggilan)}: ${escapeHtml(r.keterangan)}</div>`;
+                });
+                if (dayReminders.length > 3) {
+                  pills += `<div class="cal-pill reminder">+${dayReminders.length - 3} reminder</div>`;
                 }
                 const amEntries = Object.values(byAM);
                 amEntries.sort((a, b) => a.name.localeCompare(b.name));

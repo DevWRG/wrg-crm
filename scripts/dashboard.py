@@ -306,6 +306,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 """, env=env2)
                 return json_response(self, {"env": env2, "rows": data or []})
 
+            # AM reminders dalam range tanggal (untuk sales calendar pills).
+            # ?from=YYYY-MM-DD&to=YYYY-MM-DD
+            if path == "/api/reminders":
+                env2 = parse_env(qs)
+                rng = parse_range(qs)
+                if rng is None:
+                    return json_response(self, {"error": "invalid date"}, 400)
+                d1, d2 = rng
+                data = psql_json(f"""
+                    SELECT COALESCE(json_agg(row_to_json(t) ORDER BY t.tanggal_reminder, t.panggilan), '[]'::json)
+                    FROM (
+                      SELECT ar.id, ar.user_id, mu.panggilan, mu.cabang,
+                             ar.tanggal_reminder::text AS tanggal_reminder,
+                             ar.keterangan, ar.source_report_date::text AS source_report_date,
+                             ar.fired_h_minus_1, ar.fired_h
+                      FROM am_reminder ar
+                      JOIN master_user mu ON mu.id = ar.user_id
+                      WHERE ar.tanggal_reminder BETWEEN '{d1}' AND '{d2}'
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "from": d1, "to": d2, "rows": data or []})
+
             # Static fallback: any path that maps to a real file in
             # FRONTEND_DIST. Path traversal guarded by resolving + checking
             # parent. Allows Adminator to serve /assets/..., /*.html, etc.
