@@ -925,6 +925,64 @@ Kirim foto Geo-Tagging Camera dgn caption nama customer untuk yg belum."
     log "  #REPORT AM warn: single photo for $N customers (user=$USER_ID)"
   fi
 
+  # ── Note: TGL keterangan — reminder masa depan ──────────────
+  # Single-line format: "note: 7/6/2026 cek deal closing RS Mitra"
+  # Parser: extract semua line `note: ...` dari body. Bisa multi-note (1 per
+  # line). Tanggal flexible: dd/mm/yyyy, dd-mm-yyyy, dd Mon yyyy.
+  # Reminder fires H-1 17:00 + H 07:00 ke The ALLIANCE (cron_reminder.sh).
+  local NOTES_REPLY=""
+  while IFS= read -r NOTE_LINE; do
+    [ -z "$NOTE_LINE" ] && continue
+    local NOTE_PARSED
+    NOTE_PARSED=$(printf '%s' "$NOTE_LINE" | python3 -c '
+import sys, re, json
+line = sys.stdin.read().strip()
+m = re.match(r"^\s*note\s*:\s*(.+)$", line, re.I)
+if not m: sys.exit(0)
+rest = m.group(1).strip()
+# Try dd/mm/yyyy or dd-mm-yyyy
+md = re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})\s+(.+)$", rest)
+if md:
+    d, mo, y, txt = md.group(1), md.group(2), md.group(3), md.group(4)
+    if len(y) == 2: y = "20" + y
+    iso = f"{int(y):04d}-{int(mo):02d}-{int(d):02d}"
+    print(json.dumps({"tgl": iso, "ket": txt.strip()}))
+    sys.exit(0)
+# Try dd Mon yyyy (Indonesian + English month)
+months = {"jan":1,"feb":2,"mar":3,"apr":4,"mei":5,"may":5,"jun":6,"jul":7,"agu":8,"agt":8,"aug":8,
+         "sep":9,"okt":10,"oct":10,"nov":11,"des":12,"dec":12,"januari":1,"februari":2,"maret":3,
+         "april":4,"juni":6,"juli":7,"agustus":8,"september":9,"oktober":10,"november":11,"desember":12}
+mm = re.match(r"^(\d{1,2})\s+([A-Za-z]+)\s+(\d{2,4})\s+(.+)$", rest)
+if mm:
+    d, mon_str, y, txt = mm.group(1), mm.group(2).lower()[:3], mm.group(3), mm.group(4)
+    if mon_str in months:
+        if len(y) == 2: y = "20" + y
+        iso = f"{int(y):04d}-{months[mon_str]:02d}-{int(d):02d}"
+        print(json.dumps({"tgl": iso, "ket": txt.strip()}))
+' 2>/dev/null)
+    if [ -n "$NOTE_PARSED" ]; then
+      local N_TGL N_KET
+      N_TGL=$(echo "$NOTE_PARSED" | jq -r '.tgl')
+      N_KET=$(echo "$NOTE_PARSED" | jq -r '.ket')
+      # Check tanggal masa depan (today atau later)
+      if [[ "$N_TGL" < "$(date '+%Y-%m-%d')" ]]; then
+        NOTES_REPLY="${NOTES_REPLY}
+⚠️ Note diabaikan: tanggal $N_TGL sudah lewat."
+        continue
+      fi
+      local SAFE_KET
+      SAFE_KET=$(echo "$N_KET" | sed "s/'/''/g")
+      $PSQL -c "INSERT INTO am_reminder (user_id, tanggal_reminder, keterangan, created_msg_id, source_report_date) VALUES ($USER_ID, '$N_TGL', '$SAFE_KET', '$MSG_ID', '$TGL_ISO');" >/dev/null 2>>"$LOG_DIR/daily.log"
+      log "  #REPORT AM note: user=$USER_ID tgl=$N_TGL ket='${N_KET:0:60}'"
+      NOTES_REPLY="${NOTES_REPLY}
+📌 Note tercatat: $N_TGL — ${N_KET}"
+    fi
+  done <<< "$(printf '%s' "$BODY" | grep -iE '^[[:space:]]*note[[:space:]]*:')"
+
+  if [ -n "$NOTES_REPLY" ]; then
+    REPLY="${REPLY}${NOTES_REPLY}"
+  fi
+
   wa_send "$GROUP_JID" "$REPLY"
   log "  #REPORT AM ok: user=$USER_ID name='$DISPLAY_NAME' entries=$N matched=$MATCHED ambiguous=$AMBIGUOUS unmatched=$UNMATCHED"
   return 0
