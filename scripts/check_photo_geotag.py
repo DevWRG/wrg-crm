@@ -98,7 +98,7 @@ def main():
             """Recover decimal point if OCR dropped it. kind='lat' or 'lon'.
             Indonesia: lat -11..6 (1-2 digits before .), lon 95..141 (3 before).
             Strips whitespace dari raw (OCR kadang split '-7. 624698')."""
-            s = raw.replace(',', '.').replace(' ', '').replace('\t', '')
+            s = raw.replace(',', '.').replace(' ', '').replace('\t', '').rstrip('.')
             if '.' in s:
                 try:
                     val = float(s)
