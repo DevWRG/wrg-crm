@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS am_reminder (
     user_id INTEGER NOT NULL REFERENCES master_user(id) ON DELETE CASCADE,
     tanggal_reminder DATE NOT NULL,
     keterangan TEXT NOT NULL,
+    customer_name TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT now(),
     created_msg_id TEXT,
     source_report_date DATE,
@@ -14,6 +15,9 @@ CREATE TABLE IF NOT EXISTS am_reminder (
     fired_h BOOLEAN NOT NULL DEFAULT FALSE,
     fired_at TIMESTAMP
 );
+
+-- Idempotent kalau table sudah ada tanpa customer_name (dev applied earlier).
+ALTER TABLE am_reminder ADD COLUMN IF NOT EXISTS customer_name TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_am_reminder_tgl
     ON am_reminder (tanggal_reminder)
