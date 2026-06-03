@@ -66,6 +66,30 @@
         <div class="day-stat-grid" id="statGrid"></div>
 
         <div class="grid">
+          <section class="col-12 card" id="reminderSection" style="display:none;">
+            <div class="card-head">
+              <div class="card-title-wrap">
+                <span class="eyebrow" style="color:#9f1239;">📌 Reminder</span>
+                <h2 class="card-title">Note Reminder Hari Ini</h2>
+              </div>
+              <span class="card-action" id="reminderCount">—</span>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="am-table">
+                <thead>
+                  <tr>
+                    <th>AM</th>
+                    <th>Cabang</th>
+                    <th>Keterangan</th>
+                    <th>Dari Report</th>
+                    <th>Status fire</th>
+                  </tr>
+                </thead>
+                <tbody id="reminderBody"></tbody>
+              </table>
+            </div>
+          </section>
+
           <section class="col-12 card">
             <div class="card-head">
               <div class="card-title-wrap">
@@ -155,6 +179,36 @@
                     $('holidayBanner').innerHTML = `⭐ <strong>Libur:</strong> ${escapeHtml(holiday.keterangan)}`;
                   } else {
                     $('holidayBanner').style.display = 'none';
+                  }
+                }
+              } catch (e) {}
+
+              // Reminders due hari ini
+              try {
+                const rr = await fetch(`/api/reminders?from=${ds}&to=${ds}`);
+                if (rr.ok) {
+                  const rj = await rr.json();
+                  const remRows = rj.rows || [];
+                  if (remRows.length > 0) {
+                    $('reminderSection').style.display = '';
+                    $('reminderCount').textContent = `${remRows.length} note${remRows.length > 1 ? 's' : ''}`;
+                    $('reminderBody').innerHTML = remRows.map((r) => {
+                      const fireStatus = [];
+                      if (r.fired_h_minus_1) fireStatus.push('<span class="badge-pill green">H-1 sent</span>');
+                      else fireStatus.push('<span class="badge-pill gray">H-1 pending</span>');
+                      if (r.fired_h) fireStatus.push('<span class="badge-pill green">H sent</span>');
+                      else fireStatus.push('<span class="badge-pill gray">H pending</span>');
+                      return `
+                        <tr style="background:#fff1f2;">
+                          <td><strong>📌 ${escapeHtml(r.panggilan)}</strong></td>
+                          <td>${escapeHtml(r.cabang || '-')}</td>
+                          <td>${escapeHtml(r.keterangan)}</td>
+                          <td style="font-size:11px; color:#94a3b8;">${escapeHtml(r.source_report_date || '-')}</td>
+                          <td>${fireStatus.join(' ')}</td>
+                        </tr>`;
+                    }).join('');
+                  } else {
+                    $('reminderSection').style.display = 'none';
                   }
                 }
               } catch (e) {}
