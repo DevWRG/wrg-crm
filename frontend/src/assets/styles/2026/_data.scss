@@ -128,3 +128,18 @@
 }
 .pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .pager-btn svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+/* Dark mode fix: legacy tables (users/leave/holidays/etc) yang pakai
+ * hardcoded inline style="background:#f8fafc" untuk thead. Override
+ * supaya readable di dark mode. */
+[data-theme="dark"] .card tr[style*="background:#f8fafc"],
+[data-theme="dark"] .card tr[style*="background: #f8fafc"] {
+  background: var(--bg-muted) !important;
+}
+[data-theme="dark"] .card thead th[style*="border-bottom"] {
+  color: var(--t-base) !important;
+  border-bottom-color: var(--border) !important;
+}
+[data-theme="dark"] .card td[style*="border-bottom"] {
+  border-bottom-color: var(--border) !important;
+}
