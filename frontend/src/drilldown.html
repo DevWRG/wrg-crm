@@ -173,6 +173,17 @@
                           <td style="padding:8px 10px; font-size:11px;">${visitCell}</td>
                         </tr>`;
                       }).join('')}
+                      ${(actRows || []).filter((a) => isAM).map((a) => `
+                        <tr style="border-top:1px solid #fef3c7; background:#fffbeb;">
+                          <td style="padding:8px 10px; white-space:nowrap;">${fmtDate(a.tanggal)}</td>
+                          <td style="padding:8px 10px;"><strong>${escapeHtml(a.customer_name)}</strong> <span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:600; margin-left:4px;">*update</span></td>
+                          <td style="padding:8px 10px; color:#92400e; font-size:11px;">(luar plan)</td>
+                          <td style="padding:8px 10px; color:#94a3b8;">—</td>
+                          <td style="padding:8px 10px; text-align:center;">${badge('reported', '#f59e0b')}</td>
+                          <td style="padding:8px 10px; font-size:11px; color:#475569;">${escapeHtml(a.hasil || '—')}</td>
+                          <td style="padding:8px 10px; font-size:11px; color:#475569;">${escapeHtml(a.next_action || '—')}</td>
+                          <td style="padding:8px 10px; font-size:11px; color:#94a3b8;">—</td>
+                        </tr>`).join('')}
                     </tbody></table></div>`;
               }
 
@@ -228,8 +239,10 @@
                   }).join('');
               }
 
-              // Unmatched activity = *update marker (plan changed mid-execution)
-              if (actRows.length > 0) {
+              // Unmatched activity = *update marker (plan changed mid-execution).
+              // Untuk AM, *update rows udah di-inline ke Plan Kunjungan table.
+              // Hide separate section. Tetap show buat batch1 (TODO mode).
+              if (actRows.length > 0 && !isAM) {
                 $('actSection').style.display = '';
                 $('actCount').textContent = `(${actRows.length})`;
                 $('actTable').innerHTML = `<div style="overflow-x:auto;"><table style="width:100%; font-size:12px; border-collapse:collapse;">
