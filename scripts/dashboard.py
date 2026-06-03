@@ -417,6 +417,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 row = psql_exec(sql, env=env)
                 return json_response(self, {"created": row}, 201)
 
+            # POST /api/leave/<id> — UPDATE (PATCH-style). Adjust end_date /
+            # jenis / keterangan dari existing leave row.
+            if path.startswith("/api/leave/") and body:
+                id_str = path[len("/api/leave/"):]
+                if not id_str.isdigit():
+                    return json_response(self, {"error": "invalid id"}, 400)
+                sets = []
+                end = body.get("end_date")
+                jenis = body.get("jenis")
+                ket = body.get("keterangan")
+                start = body.get("start_date")
+                if end is not None:
+                    if not valid_date(end):
+                        return json_response(self, {"error": "invalid end_date"}, 400)
+                    sets.append(f"end_date = {psql_quote(end)}")
+                if start is not None:
+                    if not valid_date(start):
+                        return json_response(self, {"error": "invalid start_date"}, 400)
+                    sets.append(f"start_date = {psql_quote(start)}")
+                if jenis is not None:
+                    if jenis not in ("sakit", "cuti", "ijin"):
+                        return json_response(self, {"error": "invalid jenis"}, 400)
+                    sets.append(f"jenis = {psql_quote(jenis)}")
+                if ket is not None:
+                    sets.append(f"keterangan = {psql_quote(ket)}")
+                if not sets:
+                    return json_response(self, {"error": "no fields to update"}, 400)
+                sql = f"""
+                UPDATE user_leave SET {', '.join(sets)} WHERE id = {int(id_str)}
+                RETURNING (SELECT row_to_json(t) FROM (SELECT id, user_id, start_date::text AS start_date, end_date::text AS end_date, jenis, keterangan) t);
+                """
+                row = psql_exec(sql, env=env)
+                if row is None:
+                    return json_response(self, {"error": "not found"}, 404)
+                return json_response(self, {"updated": row})
+
             if path == "/api/holidays" and body:
                 tgl = body.get("tanggal") or ""
                 ket = body.get("keterangan") or ""
