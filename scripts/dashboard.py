@@ -306,6 +306,125 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 """, env=env2)
                 return json_response(self, {"env": env2, "rows": data or []})
 
+            # ── Competitor Intel ─────────────────────────────────────
+            # Per-vendor drilldown: GET /api/competitor/vendor/<encoded-name>?from=...&to=...
+            if path.startswith("/api/competitor/vendor/"):
+                env2 = parse_env(qs)
+                rng = parse_range(qs)
+                if rng is None:
+                    return json_response(self, {"error": "invalid date"}, 400)
+                d1, d2 = rng
+                from urllib.parse import unquote
+                vendor = unquote(path[len("/api/competitor/vendor/"):])
+                if not vendor or len(vendor) > 200:
+                    return json_response(self, {"error": "vendor name required"}, 400)
+                safe = psql_quote(vendor)
+                data = psql_json(f"""
+                    SELECT to_json(t) FROM (
+                      SELECT
+                        (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.tanggal DESC, r.id DESC), '[]'::json)
+                         FROM (
+                           SELECT ci.id, ci.tanggal::text AS tanggal, ci.customer_name,
+                                  mu.panggilan, mu.cabang,
+                                  ci.produk, ci.produk_kategori,
+                                  ci.harga_text, ci.harga_numeric, ci.konteks
+                           FROM competitor_intel ci
+                           LEFT JOIN master_user mu ON mu.id = ci.user_id
+                           WHERE ci.vendor = {safe} AND ci.tanggal BETWEEN '{d1}' AND '{d2}'
+                         ) r) AS rows,
+                        (SELECT COUNT(*) FROM competitor_intel WHERE vendor = {safe} AND tanggal BETWEEN '{d1}' AND '{d2}') AS total_mentions,
+                        (SELECT json_agg(row_to_json(s) ORDER BY s.cnt DESC)
+                         FROM (
+                           SELECT produk_kategori, COUNT(*) AS cnt
+                           FROM competitor_intel WHERE vendor = {safe} AND tanggal BETWEEN '{d1}' AND '{d2}'
+                             AND produk_kategori IS NOT NULL
+                           GROUP BY produk_kategori
+                         ) s) AS by_kategori,
+                        (SELECT json_agg(row_to_json(s) ORDER BY s.cnt DESC LIMIT 10)
+                         FROM (
+                           SELECT customer_name, COUNT(*) AS cnt
+                           FROM competitor_intel WHERE vendor = {safe} AND tanggal BETWEEN '{d1}' AND '{d2}'
+                             AND customer_name IS NOT NULL
+                           GROUP BY customer_name
+                         ) s) AS top_customers,
+                        (SELECT json_build_object(
+                          'avg', AVG(harga_numeric),
+                          'min', MIN(harga_numeric),
+                          'max', MAX(harga_numeric),
+                          'count', COUNT(harga_numeric))
+                         FROM competitor_intel WHERE vendor = {safe} AND tanggal BETWEEN '{d1}' AND '{d2}') AS harga_stats
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "vendor": vendor, "from": d1, "to": d2, **(data or {})})
+
+            # Summary: top vendors, top products, totals.
+            if path == "/api/competitor/summary":
+                env2 = parse_env(qs)
+                rng = parse_range(qs)
+                if rng is None:
+                    return json_response(self, {"error": "invalid date"}, 400)
+                d1, d2 = rng
+                data = psql_json(f"""
+                    SELECT to_json(t) FROM (
+                      SELECT
+                        (SELECT COUNT(*) FROM competitor_intel WHERE tanggal BETWEEN '{d1}' AND '{d2}') AS total_mentions,
+                        (SELECT COUNT(DISTINCT vendor) FROM competitor_intel WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND vendor IS NOT NULL) AS unique_vendors,
+                        (SELECT COUNT(DISTINCT activity_id) FROM competitor_intel WHERE tanggal BETWEEN '{d1}' AND '{d2}') AS source_activities,
+                        (SELECT json_agg(row_to_json(s)) FROM (
+                          SELECT vendor, COUNT(*) AS cnt
+                          FROM competitor_intel WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND vendor IS NOT NULL
+                          GROUP BY vendor ORDER BY cnt DESC LIMIT 10
+                        ) s) AS top_vendors,
+                        (SELECT json_agg(row_to_json(s)) FROM (
+                          SELECT produk_kategori, COUNT(*) AS cnt
+                          FROM competitor_intel WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND produk_kategori IS NOT NULL
+                          GROUP BY produk_kategori ORDER BY cnt DESC
+                        ) s) AS by_kategori
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "from": d1, "to": d2, **(data or {})})
+
+            # List rows with filters: from, to, vendor, user_id, customer (substring), kategori, limit, offset.
+            if path == "/api/competitor/list":
+                env2 = parse_env(qs)
+                rng = parse_range(qs)
+                if rng is None:
+                    return json_response(self, {"error": "invalid date"}, 400)
+                d1, d2 = rng
+                vendor = (qs.get("vendor") or [""])[0]
+                cust = (qs.get("customer") or [""])[0]
+                kat = (qs.get("kategori") or [""])[0]
+                uid_s = (qs.get("user_id") or [""])[0]
+                try:
+                    limit = max(1, min(500, int((qs.get("limit") or ["100"])[0])))
+                    offset = max(0, int((qs.get("offset") or ["0"])[0]))
+                except ValueError:
+                    return json_response(self, {"error": "invalid limit/offset"}, 400)
+                where = [f"ci.tanggal BETWEEN '{d1}' AND '{d2}'"]
+                if vendor: where.append(f"ci.vendor ILIKE {psql_quote('%' + vendor + '%')}")
+                if cust:   where.append(f"ci.customer_name ILIKE {psql_quote('%' + cust + '%')}")
+                if kat:    where.append(f"ci.produk_kategori = {psql_quote(kat)}")
+                if uid_s.isdigit(): where.append(f"ci.user_id = {int(uid_s)}")
+                w = " AND ".join(where)
+                data = psql_json(f"""
+                    SELECT to_json(t) FROM (
+                      SELECT
+                        (SELECT COUNT(*) FROM competitor_intel ci WHERE {w}) AS total,
+                        (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.tanggal DESC, r.id DESC), '[]'::json) FROM (
+                          SELECT ci.id, ci.activity_id, ci.tanggal::text AS tanggal,
+                                 ci.customer_name, mu.panggilan, mu.cabang,
+                                 ci.vendor, ci.produk, ci.produk_kategori,
+                                 ci.harga_text, ci.harga_numeric, ci.konteks
+                          FROM competitor_intel ci
+                          LEFT JOIN master_user mu ON mu.id = ci.user_id
+                          WHERE {w}
+                          ORDER BY ci.tanggal DESC, ci.id DESC
+                          LIMIT {limit} OFFSET {offset}
+                        ) r) AS rows
+                    ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "from": d1, "to": d2, "limit": limit, "offset": offset, **(data or {})})
+
             # Pending-report reminder widget: 3-tier list untuk dashboard top card.
             # ?date=YYYY-MM-DD (default = today)
             if path == "/api/reminders/pending":
