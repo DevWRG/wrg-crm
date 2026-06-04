@@ -1587,9 +1587,18 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
       BODY_QUERY=$(echo "$BODY" | python3 -c "
 import sys, re
 b = sys.stdin.read()
-m = re.match(r'^\s*#\s*\w+\s+(.{0,80})', b)
+# Match same-line after #hashtag (don't cross newline — prevents form labels
+# like 'Cust : RS Surya Melati' bocor jadi name candidate yg false-positive
+# match panggilan AM lain).
+m = re.match(r'^\s*#\s*\w+[ \t]+(.{0,80})', b)
 if not m: sys.exit(0)
-toks = re.findall(r'[A-Za-z]+', m.group(1))[:3]
+# Stop-words: form labels yang BUKAN nama orang.
+STOP = {'cust','hasil','next','tujuan','goal','tgl','tanggal','cabang',
+        'rs','rsu','rsd','rsud','rsia','rspau','rsau','rsab','rsi','rsgm',
+        'klinik','lab','labkesda','pkm','puskesmas','pmi','dinkes','dinas',
+        'note','visit','jv','join','silaturahmi'}
+toks_raw = re.findall(r'[A-Za-z]+', m.group(1))
+toks = [t for t in toks_raw if t.lower() not in STOP][:3]
 if not toks: sys.exit(0)
 parts = []
 # Multi-token name substring (longer phrase = higher score)
