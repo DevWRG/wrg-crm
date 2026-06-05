@@ -38,6 +38,22 @@ export const NAV = [
         icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="8" cy="14" r="1.5" fill="currentColor"/><circle cx="16" cy="14" r="1.5" fill="currentColor"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/>' },
       { key: 'competitor-intel', text: 'Competitor Intel', href: 'competitor-intel.html',
         icon: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>' },
+      { key: 'sales', text: 'Sales Performance',
+        icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 4-7"/>',
+        children: [
+          { key: 'sales-customer',     text: 'Revenue per Customer',         href: 'sales.html#monthly/customer' },
+          { key: 'sales-cabang',       text: 'Revenue per Sales & Cabang',   href: 'sales.html#monthly/sales-cabang' },
+          { key: 'sales-product',      text: 'Revenue per Product',          href: 'sales.html#monthly/product' },
+        ],
+      },
+      { key: 'sales-ar', text: 'AR / Hutang Customer',
+        icon: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',
+        children: [
+          { key: 'sales-ar-customer', text: 'AR per Customer', href: 'sales-ar.html#customer' },
+          { key: 'sales-ar-cabang',   text: 'AR per Cabang',   href: 'sales-ar.html#cabang' },
+          { key: 'sales-ar-sales',    text: 'AR per Sales',    href: 'sales-ar.html#sales' },
+        ],
+      },
     ],
   },
   {
@@ -295,7 +311,7 @@ export function mountShell() {
 
   // Auth bootstrap — WRG pages (Adminator demo pages bypass).
   // Skip on login page itself. Check /api/auth/me, redirect to login if 401.
-  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users', 'drilldown', 'sales-calendar', 'sales-day', 'competitor-intel'].includes(activeKey);
+  const isWrgPage = ['dashboard', 'leave', 'holidays', 'users', 'drilldown', 'sales-calendar', 'sales-day', 'competitor-intel', 'sales', 'sales-customer', 'sales-cabang', 'sales-product', 'sales-ar', 'sales-ar-customer', 'sales-ar-cabang', 'sales-ar-sales'].includes(activeKey);
   if (isWrgPage) {
     fetch('/api/auth/me')
       .then((r) => r.ok ? r.json() : null)

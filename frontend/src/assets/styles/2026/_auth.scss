@@ -12,11 +12,15 @@
 
 .auth-aside {
   position: relative;
-  background: linear-gradient(135deg, var(--primary), var(--purple));
+  // Wahana LifeLine brand: teal/turquoise gradient + subtle red coral accent
+  background: linear-gradient(135deg, #2C9B91 0%, #4DBEB4 45%, #7DD3CB 100%);
   color: #fff;
   padding: 40px 48px;
   display: flex; flex-direction: column;
   overflow: hidden;
+}
+.auth-aside::before {
+  background: radial-gradient(circle, rgba(232,69,69,0.20), transparent 60%) !important;
 }
 .auth-aside::before {
   content: '';

@@ -13,6 +13,8 @@ const titles = {
   'sales-calendar': 'WRG CRM · Sales Calendar',
   'sales-day': 'WRG CRM · Sales Day Summary',
   'competitor-intel': 'WRG CRM · Competitor Intel',
+  'sales': 'WRG CRM · Sales Performance',
+  'sales-ar': 'WRG CRM · AR / Hutang Customer',
   // Adminator demo pages (kept for now as reference, may be removed later)
   'email': 'Adminator · Email',
   'calendar': 'Adminator · Calendar',

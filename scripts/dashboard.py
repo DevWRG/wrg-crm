@@ -306,6 +306,505 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 """, env=env2)
                 return json_response(self, {"env": env2, "rows": data or []})
 
+            # ── Accurate Sales (daily / weekly / monthly) ─────────────
+            # Shared SQL fragment for area_summary (used in daily/weekly/monthly).
+            cabang_norm_sql = """
+                  CASE UPPER(COALESCE(mu.cabang, ''))
+                    WHEN 'SBY 2' THEN 'SURABAYA 2'
+                    WHEN 'SOLO & YOGYAKARTA' THEN 'JAWA TENGAH'
+                    WHEN 'CIREBON' THEN 'JAWA BARAT'
+                    ELSE UPPER(COALESCE(mu.cabang, ''))
+                  END
+                """
+
+            def _area_summary_sql(yr_clause: str) -> str:
+                # `yr_clause` is the YTD filter, e.g. "EXTRACT(YEAR FROM ai.tanggal)=2026"
+                # Other periods (MTD/WTD/Today) always relative to CURRENT_DATE.
+                return f"""
+                (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.area), '[]'::json) FROM (
+                  SELECT sta.area,
+                         sta.yearly::bigint, sta.monthly::bigint,
+                         sta.weekly::bigint, sta.daily::bigint,
+                         COALESCE((
+                           SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                           LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                           LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                           JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm_sql}
+                           WHERE {yr_clause}
+                             AND stb2.area = sta.area
+                         ), 0) AS ytd_revenue,
+                         COALESCE((
+                           SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                           LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                           LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                           JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm_sql}
+                           WHERE ai.tanggal >= date_trunc('month', CURRENT_DATE)::date
+                             AND ai.tanggal <= CURRENT_DATE
+                             AND stb2.area = sta.area
+                         ), 0) AS mtd_revenue,
+                         COALESCE((
+                           SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                           LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                           LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                           JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm_sql}
+                           WHERE ai.tanggal >= date_trunc('week', CURRENT_DATE)::date
+                             AND ai.tanggal <= CURRENT_DATE
+                             AND stb2.area = sta.area
+                         ), 0) AS wtd_revenue,
+                         COALESCE((
+                           SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                           LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                           LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                           JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm_sql}
+                           WHERE ai.tanggal = CURRENT_DATE
+                             AND stb2.area = sta.area
+                         ), 0) AS day_revenue
+                  FROM sales_target_area sta
+                ) r)
+                """
+
+            # GET /api/sales/daily?date=YYYY-MM-DD
+            if path == "/api/sales/daily":
+                env2 = parse_env(qs)
+                d = (qs.get("date") or [""])[0]
+                if not d:
+                    d = psql_json("SELECT to_json((CURRENT_DATE)::text);", env=env2)
+                if not valid_date(d):
+                    return json_response(self, {"error": "invalid date"}, 400)
+                data = psql_json(f"""
+                  SELECT to_json(t) FROM (
+                    SELECT
+                      '{d}' AS tanggal,
+                      (SELECT COUNT(*) FROM accurate_invoice WHERE tanggal='{d}') AS inv_count,
+                      (SELECT COALESCE(SUM(total),0)::bigint FROM accurate_invoice WHERE tanggal='{d}') AS revenue,
+                      (SELECT COUNT(DISTINCT customer_id) FROM accurate_invoice WHERE tanggal='{d}') AS customers,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT COALESCE(mu.panggilan, acs.name, 'UNASSIGNED') AS sales_name,
+                               COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               acs.name AS sales_code,
+                               COUNT(*) AS inv, COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE ai.tanggal = '{d}'
+                        GROUP BY acs.id, acs.name, mu.panggilan, mu.cabang, acs.cabang_override
+                      ) r) AS per_sales,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT aic.name AS kategori, COUNT(*) AS lines,
+                               COALESCE(SUM(aii.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        JOIN accurate_invoice_item aii ON aii.invoice_id = ai.id
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE ai.tanggal='{d}'
+                        GROUP BY aic.name
+                      ) r) AS per_kategori,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT ac.name AS customer, COUNT(*) AS inv,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_customer ac ON ac.id = ai.customer_id
+                        WHERE ai.tanggal='{d}'
+                        GROUP BY ac.name
+                        ORDER BY revenue DESC
+                      ) r) AS top_customers,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               COUNT(*) AS inv,
+                               COUNT(DISTINCT ai.customer_id) AS customers,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE ai.tanggal='{d}'
+                        GROUP BY mu.cabang, acs.cabang_override
+                      ) r) AS per_cabang,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT ait.no AS item_no, ait.name AS item_name,
+                               aic.name AS kategori,
+                               COUNT(*) AS lines,
+                               SUM(aii.qty)::numeric AS qty,
+                               COALESCE(SUM(aii.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        JOIN accurate_invoice_item aii ON aii.invoice_id = ai.id
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE ai.tanggal='{d}'
+                        GROUP BY ait.id, ait.no, ait.name, aic.name
+                        ORDER BY revenue DESC
+                      ) r) AS per_product,
+                      {_area_summary_sql(f"EXTRACT(YEAR FROM ai.tanggal)=EXTRACT(YEAR FROM CURRENT_DATE)")} AS area_summary
+                  ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, **(data or {})})
+
+            # GET /api/sales/weekly?from=YYYY-MM-DD&to=YYYY-MM-DD
+            if path == "/api/sales/weekly":
+                env2 = parse_env(qs)
+                rng = parse_range(qs)
+                if rng is None:
+                    return json_response(self, {"error": "invalid date"}, 400)
+                d1, d2 = rng
+                data = psql_json(f"""
+                  SELECT to_json(t) FROM (
+                    SELECT
+                      (SELECT COALESCE(SUM(total),0)::bigint FROM accurate_invoice WHERE tanggal BETWEEN '{d1}' AND '{d2}') AS revenue,
+                      (SELECT COUNT(*) FROM accurate_invoice WHERE tanggal BETWEEN '{d1}' AND '{d2}') AS inv_count,
+                      (SELECT COUNT(DISTINCT customer_id) FROM accurate_invoice WHERE tanggal BETWEEN '{d1}' AND '{d2}') AS customers,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.week_start), '[]'::json) FROM (
+                        SELECT date_trunc('week', tanggal)::date AS week_start,
+                               COUNT(*) AS inv, COALESCE(SUM(total),0)::bigint AS revenue
+                        FROM accurate_invoice
+                        WHERE tanggal BETWEEN '{d1}' AND '{d2}'
+                        GROUP BY 1
+                      ) r) AS per_week,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT COALESCE(mu.panggilan, acs.name, 'UNASSIGNED') AS sales_name,
+                               COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               COUNT(*) AS inv, COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                        GROUP BY acs.id, acs.name, mu.panggilan, mu.cabang, acs.cabang_override
+                      ) r) AS per_sales,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT aic.name AS kategori,
+                               COUNT(*) AS lines,
+                               COALESCE(SUM(aii.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        JOIN accurate_invoice_item aii ON aii.invoice_id = ai.id
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                        GROUP BY aic.name
+                      ) r) AS per_kategori,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT ac.name AS customer, COUNT(*) AS inv,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_customer ac ON ac.id = ai.customer_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                        GROUP BY ac.name
+                        ORDER BY revenue DESC
+                      ) r) AS top_customers,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               COUNT(*) AS inv,
+                               COUNT(DISTINCT ai.customer_id) AS customers,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                        GROUP BY mu.cabang, acs.cabang_override
+                      ) r) AS per_cabang,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT ait.no AS item_no, ait.name AS item_name,
+                               aic.name AS kategori,
+                               COUNT(*) AS lines,
+                               SUM(aii.qty)::numeric AS qty,
+                               COALESCE(SUM(aii.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        JOIN accurate_invoice_item aii ON aii.invoice_id = ai.id
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                        GROUP BY ait.id, ait.no, ait.name, aic.name
+                        ORDER BY revenue DESC
+                      ) r) AS per_product,
+                      {_area_summary_sql(f"EXTRACT(YEAR FROM ai.tanggal)=EXTRACT(YEAR FROM CURRENT_DATE)")} AS area_summary
+                  ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "from": d1, "to": d2, **(data or {})})
+
+            # GET /api/sales/monthly?year=YYYY (default current year). Includes targets.
+            if path == "/api/sales/monthly":
+                env2 = parse_env(qs)
+                yr_s = (qs.get("year") or [""])[0]
+                try:
+                    yr = int(yr_s) if yr_s else None
+                except ValueError:
+                    return json_response(self, {"error": "invalid year"}, 400)
+                if not yr:
+                    yr_row = psql_json("SELECT to_json(EXTRACT(YEAR FROM CURRENT_DATE)::int);", env=env2)
+                    yr = yr_row if isinstance(yr_row, int) else 2026
+                # Normalize cabang mapping (master_user.cabang → sales_target_branch.cabang)
+                cabang_norm = """
+                  CASE UPPER(COALESCE(mu.cabang, ''))
+                    WHEN 'SBY 2' THEN 'SURABAYA 2'
+                    WHEN 'SOLO & YOGYAKARTA' THEN 'JAWA TENGAH'
+                    WHEN 'CIREBON' THEN 'JAWA BARAT'
+                    ELSE UPPER(COALESCE(mu.cabang, ''))
+                  END
+                """
+                data = psql_json(f"""
+                  SELECT to_json(t) FROM (
+                    SELECT
+                      {yr} AS year,
+                      (SELECT COALESCE(SUM(total),0)::bigint FROM accurate_invoice WHERE EXTRACT(YEAR FROM tanggal)={yr}) AS revenue,
+                      (SELECT COUNT(*) FROM accurate_invoice WHERE EXTRACT(YEAR FROM tanggal)={yr}) AS inv_count,
+                      (SELECT (SUM(total_yearly))::bigint FROM sales_target_branch) AS yearly_target,
+                      (SELECT (SUM(monthly))::bigint FROM sales_target_branch) AS monthly_target,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.month), '[]'::json) FROM (
+                        SELECT to_char(date_trunc('month', tanggal), 'YYYY-MM') AS month,
+                               COUNT(*) AS inv,
+                               COALESCE(SUM(total),0)::bigint AS revenue
+                        FROM accurate_invoice
+                        WHERE EXTRACT(YEAR FROM tanggal)={yr}
+                        GROUP BY 1
+                      ) r) AS per_month,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.month, r.sales_name), '[]'::json) FROM (
+                        SELECT to_char(date_trunc('month', ai.tanggal), 'YYYY-MM') AS month,
+                               COALESCE(mu.panggilan, acs.name, 'UNASSIGNED') AS sales_name,
+                               COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               COUNT(*) AS inv,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                        GROUP BY 1, acs.id, acs.name, mu.panggilan, mu.cabang, acs.cabang_override
+                      ) r) AS per_sales_month,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.area, r.cabang), '[]'::json) FROM (
+                        SELECT stb.area, stb.cabang,
+                               stb.monthly::bigint AS monthly_target,
+                               stb.total_yearly::bigint AS yearly_target,
+                               COALESCE((
+                                 SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                                 LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                                 LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                 WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                                   AND {cabang_norm} = stb.cabang
+                               ), 0) AS ytd_revenue
+                        FROM sales_target_branch stb
+                      ) r) AS per_cabang_target,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT aic.name AS kategori,
+                               COUNT(*) AS lines,
+                               COALESCE(SUM(aii.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        JOIN accurate_invoice_item aii ON aii.invoice_id = ai.id
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                        GROUP BY aic.name
+                      ) r) AS per_kategori,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT ac.name AS customer, COUNT(*) AS inv,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_customer ac ON ac.id = ai.customer_id
+                        WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                        GROUP BY ac.name
+                        ORDER BY revenue DESC
+                      ) r) AS top_customers,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               COUNT(*) AS inv,
+                               COUNT(DISTINCT ai.customer_id) AS customers,
+                               COALESCE(SUM(ai.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                        GROUP BY mu.cabang, acs.cabang_override
+                      ) r) AS per_cabang,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.revenue DESC), '[]'::json) FROM (
+                        SELECT ait.no AS item_no, ait.name AS item_name,
+                               aic.name AS kategori,
+                               COUNT(*) AS lines,
+                               SUM(aii.qty)::numeric AS qty,
+                               COALESCE(SUM(aii.total),0)::bigint AS revenue
+                        FROM accurate_invoice ai
+                        JOIN accurate_invoice_item aii ON aii.invoice_id = ai.id
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                        GROUP BY ait.id, ait.no, ait.name, aic.name
+                        ORDER BY revenue DESC
+                      ) r) AS per_product,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.area), '[]'::json) FROM (
+                        SELECT sta.area,
+                               sta.yearly::bigint, sta.monthly::bigint,
+                               sta.weekly::bigint, sta.daily::bigint,
+                               COALESCE((
+                                 SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                                 LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                                 LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                 JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm}
+                                 WHERE EXTRACT(YEAR FROM ai.tanggal)={yr}
+                                   AND stb2.area = sta.area
+                               ), 0) AS ytd_revenue,
+                               COALESCE((
+                                 SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                                 LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                                 LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                 JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm}
+                                 WHERE ai.tanggal >= date_trunc('month', CURRENT_DATE)::date
+                                   AND ai.tanggal <= CURRENT_DATE
+                                   AND stb2.area = sta.area
+                               ), 0) AS mtd_revenue,
+                               COALESCE((
+                                 SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                                 LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                                 LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                 JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm}
+                                 WHERE ai.tanggal >= date_trunc('week', CURRENT_DATE)::date
+                                   AND ai.tanggal <= CURRENT_DATE
+                                   AND stb2.area = sta.area
+                               ), 0) AS wtd_revenue,
+                               COALESCE((
+                                 SELECT SUM(ai.total)::bigint FROM accurate_invoice ai
+                                 LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                                 LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                 JOIN sales_target_branch stb2 ON stb2.cabang = {cabang_norm}
+                                 WHERE ai.tanggal = CURRENT_DATE
+                                   AND stb2.area = sta.area
+                               ), 0) AS day_revenue
+                        FROM sales_target_area sta
+                      ) r) AS area_summary
+                  ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, "year": yr, **(data or {})})
+
+            # GET /api/sales/invoice/<id> — full detail (header + items + salesman + customer)
+            if path.startswith("/api/sales/invoice/"):
+                env2 = parse_env(qs)
+                id_str = path[len("/api/sales/invoice/"):]
+                if not id_str.isdigit():
+                    return json_response(self, {"error": "invalid id"}, 400)
+                inv_id = int(id_str)
+                data = psql_json(f"""
+                  SELECT to_json(t) FROM (
+                    SELECT
+                      ai.id, ai.number, ai.tanggal::text AS tanggal,
+                      ai.total::bigint, ai.taxable_amount::bigint, ai.tax_amount::bigint,
+                      ai.paid::bigint, ai.outstanding::bigint, ai.status,
+                      ac.name AS customer_name, ac.id AS customer_id,
+                      acs.name AS sales_code, acs.number AS sales_full,
+                      mu.panggilan AS sales_panggilan, mu.cabang AS internal_cabang, mu.role AS sales_role,
+                      ai.raw->>'dueDate' AS due_date,
+                      ai.raw->>'paymentTermName' AS payment_term,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.id), '[]'::json) FROM (
+                        SELECT aii.id, ait.no AS item_no, ait.name AS item_name,
+                               aic.name AS kategori, aii.qty::numeric, aii.unit,
+                               aii.unit_price::bigint, aii.discount_amount::bigint,
+                               aii.total::bigint
+                        FROM accurate_invoice_item aii
+                        LEFT JOIN accurate_item ait ON ait.id = aii.item_id
+                        LEFT JOIN accurate_item_category aic ON aic.id = ait.item_category_id
+                        WHERE aii.invoice_id = {inv_id}
+                      ) r) AS items
+                    FROM accurate_invoice ai
+                    LEFT JOIN accurate_customer ac ON ac.id = ai.customer_id
+                    LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                    LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                    WHERE ai.id = {inv_id}
+                  ) t;
+                """, env=env2)
+                if not data:
+                    return json_response(self, {"error": "invoice not found"}, 404)
+                return json_response(self, {"env": env2, "invoice": data})
+
+            # GET /api/sales/ar?from=YYYY-MM-DD&to=YYYY-MM-DD
+            # AR per customer + ratio + outstanding invoice list.
+            if path == "/api/sales/ar":
+                env2 = parse_env(qs)
+                rng = parse_range(qs)
+                if rng is None:
+                    return json_response(self, {"error": "invalid date"}, 400)
+                d1, d2 = rng
+                data = psql_json(f"""
+                  SELECT to_json(t) FROM (
+                    SELECT
+                      '{d1}' AS "from", '{d2}' AS "to",
+                      (SELECT COALESCE(SUM(total),0)::bigint FROM accurate_invoice
+                        WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND status='OPEN') AS total_ar,
+                      (SELECT COALESCE(SUM(total),0)::bigint FROM accurate_invoice
+                        WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND status='OPEN') AS total_invoiced,
+                      (SELECT COUNT(*) FROM accurate_invoice
+                        WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND status='OPEN') AS open_count,
+                      (SELECT COUNT(DISTINCT customer_id) FROM accurate_invoice
+                        WHERE tanggal BETWEEN '{d1}' AND '{d2}' AND status='OPEN') AS customers_with_ar,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.ar_amount DESC), '[]'::json) FROM (
+                        SELECT ac.id AS customer_id,
+                               COALESCE(ac.name, 'UNKNOWN') AS customer_name,
+                               (SELECT string_agg(DISTINCT COALESCE(mu.panggilan, acs.name), ', ' ORDER BY COALESCE(mu.panggilan, acs.name))
+                                FROM accurate_invoice ai2
+                                LEFT JOIN accurate_salesman acs ON acs.id = ai2.salesman_id
+                                LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                WHERE ai2.customer_id = ac.id
+                                  AND ai2.tanggal BETWEEN '{d1}' AND '{d2}'
+                                  AND ai2.status='OPEN') AS sales_names,
+                               (SELECT string_agg(DISTINCT COALESCE(mu.cabang, acs.cabang_override), ', ' ORDER BY COALESCE(mu.cabang, acs.cabang_override))
+                                FROM accurate_invoice ai2
+                                LEFT JOIN accurate_salesman acs ON acs.id = ai2.salesman_id
+                                LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                                WHERE ai2.customer_id = ac.id
+                                  AND ai2.tanggal BETWEEN '{d1}' AND '{d2}'
+                                  AND ai2.status='OPEN'
+                                  AND COALESCE(mu.cabang, acs.cabang_override) IS NOT NULL) AS cabangs,
+                               COUNT(*) AS open_count,
+                               COUNT(*) AS total_count,
+                               COALESCE(SUM(ai.total),0)::bigint AS ar_amount,
+                               COALESCE(SUM(ai.total),0)::bigint AS total_invoiced,
+                               100 AS ar_ratio,
+                               COALESCE(json_agg(
+                                 json_build_object('id', ai.id, 'number', ai.number,
+                                                   'tanggal', ai.tanggal::text, 'total', ai.total::bigint,
+                                                   'status', ai.status)
+                                 ORDER BY ai.tanggal DESC
+                               ), '[]'::json) AS all_invoices
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_customer ac ON ac.id = ai.customer_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                          AND ai.status='OPEN'
+                        GROUP BY ac.id, ac.name
+                      ) r) AS per_customer,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.ar_amount DESC), '[]'::json) FROM (
+                        SELECT COALESCE(mu.panggilan, acs.name, 'UNASSIGNED') AS sales_name,
+                               COALESCE(mu.cabang, acs.cabang_override, '?') AS cabang,
+                               COUNT(*) AS open_count,
+                               COUNT(DISTINCT ai.customer_id) AS customer_count,
+                               COALESCE(SUM(ai.total),0)::bigint AS ar_amount
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                          AND ai.status='OPEN'
+                        GROUP BY acs.id, acs.name, mu.panggilan, mu.cabang, acs.cabang_override
+                      ) r) AS per_sales,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.ar_amount DESC), '[]'::json) FROM (
+                        SELECT stb.cabang, stb.area,
+                               COUNT(*) AS open_count,
+                               COUNT(DISTINCT ai.customer_id) AS customer_count,
+                               COALESCE(SUM(ai.total),0)::bigint AS ar_amount
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        JOIN sales_target_branch stb ON stb.cabang = {cabang_norm_sql}
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                          AND ai.status='OPEN'
+                        GROUP BY stb.cabang, stb.area
+                      ) r) AS per_cabang_ar,
+                      (SELECT COALESCE(json_agg(row_to_json(r) ORDER BY r.area), '[]'::json) FROM (
+                        SELECT stb.area,
+                               COUNT(*) AS open_count,
+                               COUNT(DISTINCT ai.customer_id) AS customer_count,
+                               COALESCE(SUM(ai.total),0)::bigint AS ar_amount
+                        FROM accurate_invoice ai
+                        LEFT JOIN accurate_salesman acs ON acs.id = ai.salesman_id
+                        LEFT JOIN master_user mu ON mu.id = acs.master_user_id
+                        JOIN sales_target_branch stb ON stb.cabang = {cabang_norm_sql}
+                        WHERE ai.tanggal BETWEEN '{d1}' AND '{d2}'
+                          AND ai.status='OPEN'
+                        GROUP BY stb.area
+                      ) r) AS per_area_ar
+                  ) t;
+                """, env=env2)
+                return json_response(self, {"env": env2, **(data or {})})
+
             # ── Competitor Intel ─────────────────────────────────────
             # Per-vendor drilldown: GET /api/competitor/vendor/<encoded-name>?from=...&to=...
             if path.startswith("/api/competitor/vendor/"):
