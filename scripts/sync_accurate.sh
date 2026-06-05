@@ -191,12 +191,7 @@ except: pass")
     unit_price=$(printf '%s' "$line" | jq -r '.unitPrice // 0')
     disc=$(printf '%s' "$line" | jq -r '.itemCashDiscount // 0')
     item_total=$(printf '%s' "$line" | jq -r '.totalPrice // 0')
-    $PSQL -c "
-      INSERT INTO accurate_invoice_item (invoice_id, item_id, qty, unit, unit_price, discount_amount, total)
-      VALUES ($inv_id, ${item_id:-NULL}, $qty, NULLIF('${unit}',''), $unit_price, $disc, $item_total);
-    " >/dev/null 2>>"$LOG_DIR/daily.log"
-
-    # Upsert item master dgn full info (no/name/category/type/unit)
+    # Upsert item master FIRST (FK target) — must exist before invoice_item insert.
     if [ -n "$item_id" ] && [ "$item_id" != "null" ]; then
       local item_no item_name item_cat_id item_type
       item_no=$(printf '%s' "$line" | jq -r '.item.no // empty' | sed "s/'/''/g")
@@ -215,6 +210,11 @@ except: pass")
           unit=COALESCE(EXCLUDED.unit, accurate_item.unit);
       " >/dev/null 2>>"$LOG_DIR/daily.log"
     fi
+
+    $PSQL -c "
+      INSERT INTO accurate_invoice_item (invoice_id, item_id, qty, unit, unit_price, discount_amount, total)
+      VALUES ($inv_id, ${item_id:-NULL}, $qty, NULLIF('${unit}',''), $unit_price, $disc, $item_total);
+    " >/dev/null 2>>"$LOG_DIR/daily.log"
   done
 
   log "  accurate: invoice id=$inv_id no='${inv_no:-?}' cust=${cust_name:0:40} tgl=$tgl_iso total=$total"
