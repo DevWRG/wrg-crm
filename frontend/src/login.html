@@ -16,18 +16,16 @@
       })();
     </script>
     <style>
-      [data-theme="dark"] .wrg-brand-light { display: none !important; }
-      [data-theme="dark"] .wrg-brand-dark  { display: block !important; }
-      [data-theme="light"] .wrg-brand-dark { display: none !important; }
-      .auth-brand .logo-img { max-width: 180px; max-height: 56px; object-fit: contain; }
+      /* Login aside selalu pakai logo monochrome putih (logo-dark) supaya
+         tidak clash dengan teal gradient. Theme toggle hanya berlaku di main panel. */
+      .auth-brand .logo-img { max-width: 180px; max-height: 56px; object-fit: contain; opacity: 0.92; }
     </style>
   </head>
   <body>
     <div class="auth-shell">
       <aside class="auth-aside">
         <div class="auth-brand" style="display:flex; align-items:center; gap:10px;">
-          <img class="wrg-brand-light logo-img" src="assets/static/images/wrg/logo-light.png" alt="Wahana LifeLine">
-          <img class="wrg-brand-dark  logo-img" src="assets/static/images/wrg/logo-dark.png"  alt="Wahana LifeLine">
+          <img class="logo-img" src="assets/static/images/wrg/logo-dark.png" alt="Wahana LifeLine">
         </div>
         <div class="auth-aside-body">
           <span class="auth-aside-eyebrow">WRG CRM · Plan & Report</span>
