@@ -1736,6 +1736,18 @@ Hubungi admin untuk mengaktifkan kembali."
         continue
       fi
 
+      # Group-JID sender fallback: openclaw kadang gak resolve participant
+      # → WA_NUM jadi group ID (18+ digit). Subst dgn wa_number user yang
+      # ke-resolve via tier A/C/D, supaya activity_log.sender_wa_number tidak
+      # cross-pollute photo-followup query antar-AM di group yang sama.
+      if [ "$SENDER_IS_GROUP" = "1" ]; then
+        REAL_WA=$($PSQL -c "SELECT wa_number FROM master_user WHERE id = $USER_ID;" 2>/dev/null | head -1)
+        if [ -n "$REAL_WA" ]; then
+          WA_NUM="$REAL_WA"
+          WA_NUM_PLUS="+$REAL_WA"
+        fi
+      fi
+
       # Insert PROCESSING row
       $PSQL -c "INSERT INTO processed_message (message_id, wa_number, hashtag, status)
                  VALUES ('$MSG_ID', '$WA_NUM', '$HASHTAG', 'PROCESSING') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
