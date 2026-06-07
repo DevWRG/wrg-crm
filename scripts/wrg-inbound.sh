@@ -1343,6 +1343,26 @@ print(line.strip())
   fi
 
   if [ -z "$TARGET_ROW" ]; then
+    # Pre-check: kalau caption match ke row yang udah punya photo, kasih
+    # message spesifik instead of misleading "no match". User probably resend
+    # photo yang sudah tersimpan sebelumnya.
+    local ALREADY_NAME=""
+    if [ -n "$NAME_PART" ]; then
+      ALREADY_NAME=$($PSQL -c "
+        SELECT customer_name
+        FROM activity_log
+        WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+          AND photo_path IS NOT NULL
+          AND similarity(customer_name, '$SAFE_NAME') >= 0.50
+        ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
+        LIMIT 1;
+      " 2>/dev/null | head -1)
+    fi
+    if [ -n "$ALREADY_NAME" ]; then
+      wa_send "$GROUP_JID" "ℹ️ Foto ${ALREADY_NAME} sudah tersimpan sebelumnya. Tidak perlu kirim ulang."
+      log "  #REPORT AM photo-followup: skip-dup caption='$CAPTION_TEXT' already-saved='$ALREADY_NAME'"
+      return 0
+    fi
     wa_send "$GROUP_JID" "⚠️ Caption '${CAPTION_TEXT}' gak match ke customer manapun di report (${TOTAL_ROWS} customers). Pakai caption \`N. Nama Customer\` (mis. \`3. Rsud Sumenep\`)."
     log "  #REPORT AM photo-followup: no match for caption='$CAPTION_TEXT' (total=$TOTAL_ROWS wa=$SENDER_WA)"
     return 1
