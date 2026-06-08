@@ -1582,12 +1582,17 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
         if [ "$SENDER_IS_GROUP" = "1" ] && [ -n "$SENDER_NAME" ]; then
           SAFE_PUSH=$(echo "$SENDER_NAME" | sed "s/'/''/g")
           RESOLVED_WA=$($PSQL -c "
-            SELECT wa_number FROM master_user
+            WITH p AS (
+              SELECT regexp_replace(LOWER('$SAFE_PUSH'), '[^a-z]', '', 'g') AS norm
+            )
+            SELECT wa_number FROM master_user, p
             WHERE LOWER(nama) = LOWER('$SAFE_PUSH')
                OR LOWER(panggilan) = LOWER('$SAFE_PUSH')
                OR LOWER(nama) LIKE LOWER('$SAFE_PUSH') || ' %'
                OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_PUSH', ' ', 1))
                OR LOWER(panggilan) = LOWER(regexp_replace('$SAFE_PUSH', '[_|/\\\\\\-\\s].*\$', ''))
+               OR (LENGTH(p.norm) >= 5 AND regexp_replace(LOWER(nama), '[^a-z]', '', 'g') LIKE p.norm || '%')
+               OR (LENGTH(p.norm) >= 5 AND p.norm LIKE regexp_replace(LOWER(nama), '[^a-z]', '', 'g') || '%')
             ORDER BY LENGTH(nama) LIMIT 1;
           " 2>/dev/null | head -1)
           [ -n "$RESOLVED_WA" ] && EFFECTIVE_WA="$RESOLVED_WA"
