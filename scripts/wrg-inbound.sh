@@ -1419,8 +1419,11 @@ print(line.strip())
 
   # Count + list remaining pending photos for this sender (after current update)
   local REMAINING REMAINING_LIST
-  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
-  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
+  # Only nag for customers yang ada di #PLAN (plan_id IS NOT NULL).
+  # Ad-hoc unmatched customers di #REPORT tidak masuk reminder — AM gak
+  # diharapkan kirim foto untuk visit yang gak di-rencanakan sebelumnya.
+  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
+  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
 
   local FOLLOWUP_REPLY="✅ Foto ${CUST_NAME} tersimpan"
   if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
