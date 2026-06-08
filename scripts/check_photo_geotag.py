@@ -142,6 +142,9 @@ def main():
             m = re.search(r'(-?\d+[.,]\d{3,})\s*°[°,\s]+(-?\d+[.,]\d{3,})\s*°?', text)
         if not m and not nsew_match:
             m = re.search(r'(-?\d+[.,]\d{4,})[\s,]+(-?\d+[.,]\d{4,})', text)
+        # E) "-71548°, 113,4816°" — lat decimal hilang OCR, lon comma-decimal
+        if not m and not nsew_match:
+            m = re.search(r'(-?\d{4,})\s*°[°,\s]+(-?\d+[.,]\d{3,})\s*°?', text)
         if nsew_match:
             try:
                 lat = float(nsew_match.group(1).replace(',', '.'))
