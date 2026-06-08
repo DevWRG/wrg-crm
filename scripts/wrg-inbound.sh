@@ -1567,6 +1567,25 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
         # Untuk plain text, cuma trigger kalo ada pending photo_path IS NULL
         # row di activity_log hari ini (avoid noise on unrelated images).
         FOLLOWUP_HIT=0
+        # When sender is group JID (openclaw gak resolve participant), resolve
+        # via sender_name pushname so PENDING_CNT query + handler pakai actual
+        # AM wa_number — otherwise sender_wa_number lookup tidak match (data
+        # fix 2026-06-07 sudah re-set semua activity_log.sender_wa_number
+        # ke individual phone).
+        EFFECTIVE_WA="$WA_NUM"
+        if [ "$SENDER_IS_GROUP" = "1" ] && [ -n "$SENDER_NAME" ]; then
+          SAFE_PUSH=$(echo "$SENDER_NAME" | sed "s/'/''/g")
+          RESOLVED_WA=$($PSQL -c "
+            SELECT wa_number FROM master_user
+            WHERE LOWER(nama) = LOWER('$SAFE_PUSH')
+               OR LOWER(panggilan) = LOWER('$SAFE_PUSH')
+               OR LOWER(nama) LIKE LOWER('$SAFE_PUSH') || ' %'
+               OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_PUSH', ' ', 1))
+               OR LOWER(panggilan) = LOWER(regexp_replace('$SAFE_PUSH', '[_|/\\\\\\-\\s].*\$', ''))
+            ORDER BY LENGTH(nama) LIMIT 1;
+          " 2>/dev/null | head -1)
+          [ -n "$RESOLVED_WA" ] && EFFECTIVE_WA="$RESOLVED_WA"
+        fi
         if [ -n "$MEDIA_PATH" ] && [ -f "$MEDIA_PATH" ] && \
            [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ]; then
           FIRST_LINE=$(echo "$BODY" | head -1)
@@ -1574,13 +1593,13 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
             FOLLOWUP_HIT=1
           elif [ -n "$FIRST_LINE" ] && [ "${#FIRST_LINE}" -lt 100 ]; then
             # Plain text — check ada pending row buat sender ini hari ini
-            PENDING_CNT=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$WA_NUM' AND tanggal = CURRENT_DATE AND photo_path IS NULL;" 2>/dev/null | head -1)
+            PENDING_CNT=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$EFFECTIVE_WA' AND tanggal = CURRENT_DATE AND photo_path IS NULL;" 2>/dev/null | head -1)
             [ "${PENDING_CNT:-0}" -gt 0 ] 2>/dev/null && FOLLOWUP_HIT=1
           fi
         fi
         if [ "$FOLLOWUP_HIT" = "1" ]; then
-          if handle_am_followup_photo "$GROUP_JID" "$BODY" "$MEDIA_PATH" "$WA_NUM"; then
-            $PSQL -c "INSERT INTO processed_message (message_id, wa_number, hashtag, status) VALUES ('$MSG_ID', '$WA_NUM', 'photo-followup', 'PHOTO_FOLLOWUP') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
+          if handle_am_followup_photo "$GROUP_JID" "$BODY" "$MEDIA_PATH" "$EFFECTIVE_WA"; then
+            $PSQL -c "INSERT INTO processed_message (message_id, wa_number, hashtag, status) VALUES ('$MSG_ID', '$EFFECTIVE_WA', 'photo-followup', 'PHOTO_FOLLOWUP') ON CONFLICT DO NOTHING;" >/dev/null 2>>"$LOG_DIR/daily.log"
             PROCESSED=$((PROCESSED + 1))
             HASHTAG_HITS=$((HASHTAG_HITS + 1))
             continue
