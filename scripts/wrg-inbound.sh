@@ -1327,10 +1327,32 @@ print(line.strip())
     " 2>/dev/null | head -1)
   fi
 
-  # Fallback: ROW_NUMBER by index if name match failed.
-  # Only consider rows yang masih pending (photo_path IS NULL) supaya ga
-  # ke-pair ke row yang udah ada foto (prevent overwrite + cross-AM collision
-  # ketika sender_wa_number shared across AM via grup yang sama).
+  # Skip-dup pre-check SEBELUM positional fallback: kalau name fuzzy fail
+  # tapi caption match high-sim ke row yang udah ada photo, anggap resend.
+  # Jangan fallback ke positional IDX — risiko pick row random yang gak match
+  # intent AM (kasus: "5.Rs Ar Rasyid" → Ar Rasyid udah saved → fuzzy fail →
+  # IDX=5 fallback ambil customer ke-5 random).
+  if [ -z "$TARGET_ROW" ] && [ -n "$NAME_PART" ]; then
+    local ALREADY_NAME=""
+    ALREADY_NAME=$($PSQL -c "
+      SELECT customer_name
+      FROM activity_log
+      WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO'
+        AND photo_path IS NOT NULL
+        AND similarity(customer_name, '$SAFE_NAME') >= 0.50
+      ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
+      LIMIT 1;
+    " 2>/dev/null | head -1)
+    if [ -n "$ALREADY_NAME" ]; then
+      wa_send "$GROUP_JID" "ℹ️ Foto ${ALREADY_NAME} sudah tersimpan sebelumnya. Tidak perlu kirim ulang."
+      log "  #REPORT AM photo-followup: skip-dup caption='$CAPTION_TEXT' already-saved='$ALREADY_NAME'"
+      return 0
+    fi
+  fi
+
+  # Positional ROW_NUMBER fallback by IDX. Hanya fire kalau caption murni
+  # number tanpa name (mis. "1.", "2)") atau name+number tapi name gak nempel
+  # ke pending/saved row apapun.
   if [ -z "$TARGET_ROW" ] && [ -n "$IDX" ]; then
     TARGET_ROW=$($PSQL -c "
       SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || 'f' || E'\t' || '0.00'
@@ -1344,26 +1366,6 @@ print(line.strip())
   fi
 
   if [ -z "$TARGET_ROW" ]; then
-    # Pre-check: kalau caption match ke row yang udah punya photo, kasih
-    # message spesifik instead of misleading "no match". User probably resend
-    # photo yang sudah tersimpan sebelumnya.
-    local ALREADY_NAME=""
-    if [ -n "$NAME_PART" ]; then
-      ALREADY_NAME=$($PSQL -c "
-        SELECT customer_name
-        FROM activity_log
-        WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO'
-          AND photo_path IS NOT NULL
-          AND similarity(customer_name, '$SAFE_NAME') >= 0.50
-        ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
-        LIMIT 1;
-      " 2>/dev/null | head -1)
-    fi
-    if [ -n "$ALREADY_NAME" ]; then
-      wa_send "$GROUP_JID" "ℹ️ Foto ${ALREADY_NAME} sudah tersimpan sebelumnya. Tidak perlu kirim ulang."
-      log "  #REPORT AM photo-followup: skip-dup caption='$CAPTION_TEXT' already-saved='$ALREADY_NAME'"
-      return 0
-    fi
     wa_send "$GROUP_JID" "⚠️ Caption '${CAPTION_TEXT}' gak match ke customer manapun di report (${TOTAL_ROWS} customers). Pakai caption \`N. Nama Customer\` (mis. \`3. Rsud Sumenep\`)."
     log "  #REPORT AM photo-followup: no match for caption='$CAPTION_TEXT' (total=$TOTAL_ROWS wa=$SENDER_WA)"
     return 1
