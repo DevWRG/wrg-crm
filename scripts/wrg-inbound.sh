@@ -1278,8 +1278,9 @@ handle_am_followup_photo() {
   # Ini handle case user pakai number sebagai sequence counter dgn name sebagai
   # identifier, OR pakai number-only caption tanpa nama.
   local GROUP_JID="$1" BODY="$2" MEDIA_PATH="$3" SENDER_WA="$4"
-  local TGL_ISO CAPTION_TEXT IDX
+  local TGL_ISO TGL_FROM CAPTION_TEXT IDX
   TGL_ISO=$(date '+%Y-%m-%d')
+  TGL_FROM=$(date -v-7d '+%Y-%m-%d')
 
   # Extract caption components: number (optional) + text-after-number
   CAPTION_TEXT=$(echo "$BODY" | head -1)
@@ -1305,7 +1306,7 @@ print(line.strip())
   fi
 
   local TOTAL_ROWS
-  TOTAL_ROWS=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO';" 2>/dev/null | head -1)
+  TOTAL_ROWS=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO';" 2>/dev/null | head -1)
   if [ -z "$TOTAL_ROWS" ] || [ "$TOTAL_ROWS" = "0" ]; then
     return 1  # No pending #REPORT from this sender today
   fi
@@ -1318,7 +1319,7 @@ print(line.strip())
     TARGET_ROW=$($PSQL -c "
       SELECT id || E'\t' || customer_name || E'\t' || COALESCE(plan_id::text, 'NULL') || E'\t' || user_id || E'\t' || (CASE WHEN photo_path IS NOT NULL THEN 't' ELSE 'f' END) || E'\t' || ROUND(similarity(customer_name, '$SAFE_NAME')::numeric, 2)
       FROM activity_log
-      WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+      WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO'
         AND photo_path IS NULL
         AND similarity(customer_name, '$SAFE_NAME') >= 0.30
       ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
@@ -1336,7 +1337,7 @@ print(line.strip())
       FROM (
         SELECT *, ROW_NUMBER() OVER (ORDER BY id ASC) AS rn
         FROM activity_log
-        WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+        WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO'
           AND photo_path IS NULL
       ) t WHERE rn = $IDX;
     " 2>/dev/null | head -1)
@@ -1351,7 +1352,7 @@ print(line.strip())
       ALREADY_NAME=$($PSQL -c "
         SELECT customer_name
         FROM activity_log
-        WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO'
+        WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO'
           AND photo_path IS NOT NULL
           AND similarity(customer_name, '$SAFE_NAME') >= 0.50
         ORDER BY similarity(customer_name, '$SAFE_NAME') DESC
@@ -1418,8 +1419,8 @@ print(line.strip())
 
   # Count + list remaining pending photos for this sender (after current update)
   local REMAINING REMAINING_LIST
-  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
-  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
+  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
+  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL;" 2>/dev/null | head -1)
 
   local FOLLOWUP_REPLY="✅ Foto ${CUST_NAME} tersimpan"
   if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
@@ -1593,7 +1594,7 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
             FOLLOWUP_HIT=1
           elif [ -n "$FIRST_LINE" ] && [ "${#FIRST_LINE}" -lt 100 ]; then
             # Plain text — check ada pending row buat sender ini hari ini
-            PENDING_CNT=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$EFFECTIVE_WA' AND tanggal = CURRENT_DATE AND photo_path IS NULL;" 2>/dev/null | head -1)
+            PENDING_CNT=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$EFFECTIVE_WA' AND tanggal >= CURRENT_DATE - INTERVAL '7 days' AND photo_path IS NULL;" 2>/dev/null | head -1)
             [ "${PENDING_CNT:-0}" -gt 0 ] 2>/dev/null && FOLLOWUP_HIT=1
           fi
         fi
