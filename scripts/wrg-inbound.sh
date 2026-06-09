@@ -1438,12 +1438,18 @@ print(line.strip())
   log "  #REPORT AM photo-followup ok: user=$USER_ID cust='$CUST_NAME' lat=$V_LAT lon=$V_LON mismatch=$V_MISMATCH"
 
   # Count + list remaining pending photos for this sender (after current update)
-  local REMAINING REMAINING_LIST
+  local REMAINING REMAINING_LIST MATCH_TGL
+  # Scope nag ke tanggal report yang lagi difoto (tanggal matched row), BUKAN
+  # window 7-hari yang dipakai utk matching. Window lebar bikin nag akumulasi
+  # visit ter-plan dari hari-hari lalu yang gak pernah difoto (terobservasi
+  # 2026-06-09: Iqbal plan 6 hari ini, tapi nag bilang 18 — sisa Jun 6 + Jun 8).
+  MATCH_TGL=$($PSQL -c "SELECT tanggal FROM activity_log WHERE id = $ACT_ID;" 2>/dev/null | head -1)
+  [ -z "$MATCH_TGL" ] && MATCH_TGL="$TGL_ISO"
   # Only nag for customers yang ada di #PLAN (plan_id IS NOT NULL).
   # Ad-hoc unmatched customers di #REPORT tidak masuk reminder — AM gak
   # diharapkan kirim foto untuk visit yang gak di-rencanakan sebelumnya.
-  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
-  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
+  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$MATCH_TGL' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
+  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$MATCH_TGL' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
 
   local FOLLOWUP_REPLY="✅ Foto ${CUST_NAME} tersimpan"
   if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
