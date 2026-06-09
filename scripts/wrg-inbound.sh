@@ -1366,9 +1366,27 @@ print(line.strip())
   fi
 
   if [ -z "$TARGET_ROW" ]; then
+    # Silent skip kalau caption unrelated ke semua pending+saved customer
+    # (max sim < 0.20). Avoid spam warning untuk casual chat text yang
+    # kebetulan dilampirkan ke foto (mis. "Mas mau order", "<media:image>").
+    # Kalau caption masih relevant (sim 0.20-0.30 atau >= 0.30 tapi photo
+    # already saved & skip-dup gak fire), tetep warn — itu likely typo.
+    local MAX_SIM=""
+    if [ -n "$NAME_PART" ]; then
+      MAX_SIM=$($PSQL -c "
+        SELECT ROUND(MAX(similarity(customer_name, '$SAFE_NAME'))::numeric, 2)
+        FROM activity_log
+        WHERE sender_wa_number = '$SENDER_WA'
+          AND tanggal BETWEEN '$TGL_FROM' AND '$TGL_ISO';
+      " 2>/dev/null | head -1)
+    fi
+    if [ -z "$MAX_SIM" ] || awk "BEGIN{exit !($MAX_SIM < 0.20)}"; then
+      log "  #REPORT AM photo-followup: silent-skip caption='$CAPTION_TEXT' max_sim=$MAX_SIM (unrelated text)"
+      return 0   # mark processed, avoid re-warn on lookback
+    fi
     wa_send "$GROUP_JID" "⚠️ Caption '${CAPTION_TEXT}' gak match ke customer manapun di report (${TOTAL_ROWS} customers). Pakai caption \`N. Nama Customer\` (mis. \`3. Rsud Sumenep\`)."
-    log "  #REPORT AM photo-followup: no match for caption='$CAPTION_TEXT' (total=$TOTAL_ROWS wa=$SENDER_WA)"
-    return 1
+    log "  #REPORT AM photo-followup: no match for caption='$CAPTION_TEXT' (total=$TOTAL_ROWS wa=$SENDER_WA max_sim=$MAX_SIM)"
+    return 0   # return 0 supaya processed_message marked → no re-fire
   fi
 
   local ACT_ID CUST_NAME PLAN_ID USER_ID ALREADY_HAS_PHOTO MATCH_SIM
