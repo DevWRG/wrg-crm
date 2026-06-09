@@ -87,6 +87,21 @@
               </div>
               <span class="card-action" id="leaveCount">…</span>
             </div>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:end; padding:0 0 12px;">
+              <div>
+                <label style="display:block; font-size:11px; color:#64748b; margin-bottom:4px;">Dari</label>
+                <input id="fltFrom" type="date" class="input" style="height:36px; min-width:150px;">
+              </div>
+              <div>
+                <label style="display:block; font-size:11px; color:#64748b; margin-bottom:4px;">Sampai</label>
+                <input id="fltTo" type="date" class="input" style="height:36px; min-width:150px;">
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn--ghost" id="fltPresetActive" style="font-size:12px;">Active</button>
+                <button type="button" class="btn btn--ghost" id="fltPresetMonth" style="font-size:12px;">Bulan ini</button>
+                <button type="button" class="btn btn--ghost" id="fltPresetAll" style="font-size:12px;">Semua</button>
+              </div>
+            </div>
             <div style="overflow-x:auto;">
               <table style="width:100%; font-size:13px;">
                 <thead>
@@ -122,13 +137,33 @@
               $('fUser').innerHTML = '<option value="">— pilih —</option>' + opts;
             }
 
+            let allLeaves = [];
+
             async function loadLeaves() {
               const r = await fetch('/api/leave');
               const json = await r.json();
-              const rows = json.rows || [];
-              $('leaveCount').textContent = `${rows.length} entries`;
+              allLeaves = json.rows || [];
+              applyFilter();
+            }
+
+            function applyFilter() {
+              const from = $('fltFrom').value;
+              const to   = $('fltTo').value;
+              // Overlap semantics: row.start <= to AND row.end >= from
+              const rows = allLeaves.filter((row) => {
+                if (from && row.end_date   < from) return false;
+                if (to   && row.start_date > to)   return false;
+                return true;
+              });
+              $('leaveCount').textContent = (from || to)
+                ? `${rows.length} of ${allLeaves.length} entries`
+                : `${allLeaves.length} entries`;
+              renderRows(rows);
+            }
+
+            function renderRows(rows) {
               if (rows.length === 0) {
-                $('leaveBody').innerHTML = '<tr><td colspan="8" style="padding:24px; text-align:center; color:#94a3b8;">Belum ada entry.</td></tr>';
+                $('leaveBody').innerHTML = '<tr><td colspan="8" style="padding:24px; text-align:center; color:#94a3b8;">Tidak ada entry dalam range ini.</td></tr>';
                 return;
               }
               $('leaveBody').innerHTML = rows.map((row) => `
@@ -236,10 +271,37 @@
               }
             });
 
+            function setPresetActive() {
+              const today = new Date().toISOString().slice(0, 10);
+              $('fltFrom').value = today;
+              $('fltTo').value = today;
+              applyFilter();
+            }
+            function setPresetMonth() {
+              const d = new Date();
+              const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0');
+              const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+              $('fltFrom').value = `${y}-${m}-01`;
+              $('fltTo').value   = `${y}-${m}-${String(last).padStart(2, '0')}`;
+              applyFilter();
+            }
+            function setPresetAll() {
+              $('fltFrom').value = '';
+              $('fltTo').value   = '';
+              applyFilter();
+            }
+
             document.addEventListener('DOMContentLoaded', () => {
               const today = new Date().toISOString().slice(0, 10);
               $('fStart').value = today;
               $('fEnd').value = today;
+              // Default filter: Active (covering today's leaves)
+              setPresetActive();
+              $('fltFrom').addEventListener('change', applyFilter);
+              $('fltTo').addEventListener('change', applyFilter);
+              $('fltPresetActive').addEventListener('click', setPresetActive);
+              $('fltPresetMonth').addEventListener('click', setPresetMonth);
+              $('fltPresetAll').addEventListener('click', setPresetAll);
               loadUsers();
               loadLeaves();
             });
