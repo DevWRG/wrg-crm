@@ -1810,15 +1810,22 @@ print(' UNION ALL '.join(parts))
       # token, lalu match panggilan.
       if [ -z "$USER_ROW" ] && [ -n "$SENDER_NAME" ]; then
         SAFE_NAME=$(echo "$SENDER_NAME" | sed "s/'/''/g")
+        # CTE p.norm = pushname di-strip ke huruf saja → match pushname nyambung
+        # tanpa spasi/separator (mis. "Vickyadi" → "Vicky Adi Nugroho"). Mirror
+        # resolver photo-followup; sebelumnya cuma di sana, bikin #REPORT Vicky
+        # gagal auth 2026-06-09.
         USER_ROW=$($PSQL -c "
+          WITH p AS (SELECT regexp_replace(LOWER('$SAFE_NAME'), '[^a-z]', '', 'g') AS norm)
           SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
                  CASE WHEN aktif THEN 't' ELSE 'f' END
-          FROM master_user
+          FROM master_user, p
           WHERE LOWER(nama) = LOWER('$SAFE_NAME')
              OR LOWER(panggilan) = LOWER('$SAFE_NAME')
              OR LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'
              OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))
              OR LOWER(panggilan) = LOWER(regexp_replace('$SAFE_NAME', '[_|/\\\\\\-\\s].*\$', ''))
+             OR (LENGTH(p.norm) >= 5 AND regexp_replace(LOWER(nama), '[^a-z]', '', 'g') LIKE p.norm || '%')
+             OR (LENGTH(p.norm) >= 5 AND p.norm LIKE regexp_replace(LOWER(nama), '[^a-z]', '', 'g') || '%')
           ORDER BY
             CASE
               WHEN LOWER(nama)      = LOWER('$SAFE_NAME')                          THEN 1
