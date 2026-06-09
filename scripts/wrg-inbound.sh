@@ -154,7 +154,9 @@ parse_tanggal_from_body() {
     local CLEAN="${TGL_RAW// /}"
     CLEAN="${CLEAN//-//}"
     if [[ "$CLEAN" =~ ^([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})$ ]]; then
-      printf "%04d-%02d-%02d" "${BASH_REMATCH[3]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[1]}"
+      # 10# paksa base-10 — tanpa ini "08"/"09" diparse sbg octal invalid →
+      # printf gagal & output "YYYY-00-00" (tanggal rusak). Bug live 2026-06-09.
+      printf "%04d-%02d-%02d" "$((10#${BASH_REMATCH[3]}))" "$((10#${BASH_REMATCH[2]}))" "$((10#${BASH_REMATCH[1]}))"
       return
     fi
   fi
