@@ -78,7 +78,7 @@ PY
 fi
 
 # --- Susun & kirim reminder ---
-MSG="⏰ *Reminder Daily Update HoD*
+MSG="⏰ *Reminder Daily Sales Update HoD*
 
 @${WHO_NUM} (${WHO}) — hari ini *${HARI}, ${DDMMYYYY}* (tanggal ${PARITY}) giliran lu share *daily update* di grup ini.
 
