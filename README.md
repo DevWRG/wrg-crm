@@ -109,6 +109,7 @@ wrg-crm/
     ├── seed_demo_data.py          Generate realistic demo data di dev DB
     ├── export_pdf.sh              Headless Chrome --print-to-pdf
     ├── cron_weekly_report.sh      Cron Sen 07:00: PDF mingguan + notif WA admin
+    ├── cron_hod_daily_reminder.sh Cron 20:00 weekday: reminder HOD giliran daily update (docs/HOD-DAILY-REMINDER.md)
     ├── env-switch.sh              Toggle dev↔prod (DB + inbound filter)
     └── backup_pg.sh               pg_dump nightly ke backups/
 ```
@@ -203,6 +204,7 @@ Output: `exports/wrg-report-{from}_{to}-{timestamp}.pdf` (~660KB, 7 halaman).
 15  8 * * *   wrg-daily.sh plan_check  → reminder yg belum kirim plan (batch 1, 15-min nudge before deadline 08:30)
 30 20 * * *   wrg-daily.sh report_check → reminder AM yg belum kirim report
 0  22 * * 1-5 wrg-daily.sh daily_summary → AI summary ke admin
+0  20 * * 1-5 cron_hod_daily_reminder.sh → reminder HOD giliran daily update (genap=Rocky/ganjil=Yogi, deadline 20:30)
 0   2 * * *   backup_pg.sh             → pg_dump nightly
 0   7 * * 1   cron_weekly_report.sh    → PDF mingguan + notif WA ke direksi
 ```
