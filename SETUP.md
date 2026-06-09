@@ -283,6 +283,9 @@ PATH=/opt/homebrew/bin:/opt/homebrew/opt/postgresql@16/bin:/usr/local/bin:/usr/b
 30  20  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/wrg-daily.sh report_check   >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 0   22  *  *  1-5 bash /Users/development/Documents/wrg-crm/scripts/wrg-daily.sh daily_summary >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 
+# HOD daily sales update reminder ke grup Koord HoD (giliran genap=Rocky/ganjil=Yogi, deadline 20:30)
+0   20  *  *  1-5 bash /Users/development/Documents/wrg-crm/scripts/cron_hod_daily_reminder.sh  >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
+
 # Backup PG nightly
 0    2  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/backup_pg.sh                >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 
@@ -292,7 +295,7 @@ PATH=/opt/homebrew/bin:/opt/homebrew/opt/postgresql@16/bin:/usr/local/bin:/usr/b
 
 Verify cron daemon jalan + entries ke-load:
 ```bash
-crontab -l | grep wrg-crm | wc -l   # expect 6
+crontab -l | grep wrg-crm | wc -l   # expect 7
 tail -f logs/cron.log               # tunggu 1 menit, lihat inbound polling
 ```
 
@@ -416,6 +419,8 @@ Dashboard mungkin lagi down. Cek §10.1 dulu, baru retry export.
 | Generate PDF custom range | `bash scripts/export_pdf.sh 2026-05-04 2026-05-22` |
 | Preview prod tanpa flip | `open "http://127.0.0.1:8091/?env=prod"` |
 | Manual run cron weekly | `bash scripts/cron_weekly_report.sh` |
+| Test HOD reminder (tanpa kirim) | stub `openclaw` di PATH lalu `bash scripts/cron_hod_daily_reminder.sh` (lihat `docs/HOD-DAILY-REMINDER.md`) |
+| Regenerate README screenshots | seed demo data → `cd frontend && WRG_SERVICE_TOKEN=<token-:8092> node scripts/wrg-readme-shots.mjs` |
 | Seed demo data (dev only) | `python3 scripts/seed_demo_data.py` |
 | Reset test data (dev) | `psql -U wrg_admin -d wrg_crm_dev -c "TRUNCATE activity_log, sales_plan, sales_todo RESTART IDENTITY CASCADE;"` |
 | Backup manual | `bash scripts/backup_pg.sh` |
