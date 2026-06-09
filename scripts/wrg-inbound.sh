@@ -1389,8 +1389,11 @@ print(line.strip())
     return 0   # return 0 supaya processed_message marked → no re-fire
   fi
 
-  local ACT_ID CUST_NAME PLAN_ID USER_ID ALREADY_HAS_PHOTO MATCH_SIM
+  local ACT_ID CUST_NAME PLAN_ID USER_ID ALREADY_HAS_PHOTO MATCH_SIM MATCH_TGL
   IFS=$'\t' read -r ACT_ID CUST_NAME PLAN_ID USER_ID ALREADY_HAS_PHOTO MATCH_SIM <<<"$TARGET_ROW"
+  # Tanggal report yang lagi difoto (dipakai utk scope nag + key coalescing).
+  MATCH_TGL=$($PSQL -c "SELECT tanggal FROM activity_log WHERE id = $ACT_ID;" 2>/dev/null | head -1)
+  [ -z "$MATCH_TGL" ] && MATCH_TGL="$TGL_ISO"
   if [ "$ALREADY_HAS_PHOTO" = "t" ]; then
     log "  #REPORT AM photo-followup: overwriting existing photo for cust='$CUST_NAME'"
   fi
@@ -1413,8 +1416,9 @@ print(line.strip())
   $PSQL -c "UPDATE activity_log SET photo_path = '$SAFE_PATH', photo_geotag = '$SAFE_GEOTAG'::jsonb WHERE id = $ACT_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
 
   if [ "$HAS_GT" != "true" ]; then
-    wa_send "$GROUP_JID" "⚠️ Foto customer #$IDX ($CUST_NAME) tersimpan, tapi *tidak ada geotag*. Pakai Geo-Tagging Camera supaya coord ke-burn di pixel."
-    log "  #REPORT AM photo-followup: no geotag idx=$IDX cust='$CUST_NAME'"
+    buffer_photo_save "$GROUP_JID" "$SENDER_WA" "$MATCH_TGL" "$CUST_NAME" \
+      "⚠️ ${CUST_NAME}: foto tersimpan tapi *tidak ada geotag*. Pakai Geo-Tagging Camera supaya coord ke-burn di pixel."
+    log "  #REPORT AM photo-followup: no geotag idx=$IDX cust='$CUST_NAME' (buffered)"
     return 0
   fi
 
@@ -1437,32 +1441,13 @@ print(line.strip())
 
   log "  #REPORT AM photo-followup ok: user=$USER_ID cust='$CUST_NAME' lat=$V_LAT lon=$V_LON mismatch=$V_MISMATCH"
 
-  # Count + list remaining pending photos for this sender (after current update)
-  local REMAINING REMAINING_LIST MATCH_TGL
-  # Scope nag ke tanggal report yang lagi difoto (tanggal matched row), BUKAN
-  # window 7-hari yang dipakai utk matching. Window lebar bikin nag akumulasi
-  # visit ter-plan dari hari-hari lalu yang gak pernah difoto (terobservasi
-  # 2026-06-09: Iqbal plan 6 hari ini, tapi nag bilang 18 — sisa Jun 6 + Jun 8).
-  MATCH_TGL=$($PSQL -c "SELECT tanggal FROM activity_log WHERE id = $ACT_ID;" 2>/dev/null | head -1)
-  [ -z "$MATCH_TGL" ] && MATCH_TGL="$TGL_ISO"
-  # Only nag for customers yang ada di #PLAN (plan_id IS NOT NULL).
-  # Ad-hoc unmatched customers di #REPORT tidak masuk reminder — AM gak
-  # diharapkan kirim foto untuk visit yang gak di-rencanakan sebelumnya.
-  REMAINING=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$MATCH_TGL' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
-  REMAINING_LIST=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$SENDER_WA' AND tanggal = '$MATCH_TGL' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
-
-  local FOLLOWUP_REPLY="✅ Foto ${CUST_NAME} tersimpan"
-  if [ "$REMAINING" -gt 0 ] 2>/dev/null; then
-    FOLLOWUP_REPLY="${FOLLOWUP_REPLY}. Sisa ${REMAINING} customer belum ada foto:
-⚠️ ${REMAINING_LIST}"
-  else
-    FOLLOWUP_REPLY="${FOLLOWUP_REPLY}. ✅ Semua foto visit lengkap."
-  fi
+  # Buffer save ini; konfirmasi + nag "sisa" dikirim sekali per AM di akhir run
+  # (flush_photo_buffers) supaya foto beruntun gak spam reply per foto.
+  local MISMATCH_WARN=""
   if [ "$V_MISMATCH" = "TRUE" ]; then
-    FOLLOWUP_REPLY="${FOLLOWUP_REPLY}
-⚠️ Tanggal foto $TS_DATE ≠ plan $TGL_ISO — pastikan foto diambil hari ini."
+    MISMATCH_WARN="⚠️ ${CUST_NAME}: tanggal foto $TS_DATE ≠ plan $TGL_ISO — pastikan foto diambil tanggal report."
   fi
-  wa_send "$GROUP_JID" "$FOLLOWUP_REPLY"
+  buffer_photo_save "$GROUP_JID" "$SENDER_WA" "$MATCH_TGL" "$CUST_NAME" "$MISMATCH_WARN"
   return 0
 }
 
@@ -1476,6 +1461,59 @@ handle_update() {
   local GROUP_JID="$1"
   wa_send "$GROUP_JID" "🚧 #UPDATE handler belum di-deploy (Phase 0 — coming soon)."
   return 0
+}
+
+# ── Photo-followup coalescing ───────────────────────────────
+# Foto beruntun dari satu AM (mis. kirim 5 foto sekaligus) sebelumnya bikin
+# 5 reply "Foto X tersimpan. Sisa N..." → spam. Buffer save per run poller,
+# kirim SATU ringkasan per (grup, AM, tanggal) di akhir run. Bash 3.2-safe
+# (temp files, bukan associative array). Catatan: coalescing per-run; foto yg
+# nyebrang batas poll 1-menit bisa jadi 2 ringkasan (tetap jauh lebih sedikit).
+
+buffer_photo_key() {
+  printf '%s_%s_%s' "$1" "$2" "$3" | tr -c 'A-Za-z0-9' '_'
+}
+
+buffer_photo_save() {
+  local g="$1" wa="$2" tgl="$3" name="$4" warn="$5" key
+  key=$(buffer_photo_key "$g" "$wa" "$tgl")
+  printf '%s\n' "$name" >> "$PHOTO_FLUSH_DIR/$key.names"
+  if [ ! -f "$PHOTO_FLUSH_DIR/$key.meta" ]; then
+    printf '%s\t%s\t%s\n' "$g" "$wa" "$tgl" > "$PHOTO_FLUSH_DIR/$key.meta"
+  fi
+  [ -n "$warn" ] && printf '%s\n' "$warn" >> "$PHOTO_FLUSH_DIR/$key.warn"
+}
+
+flush_photo_buffers() {
+  [ -d "$PHOTO_FLUSH_DIR" ] || return 0
+  local meta g wa tgl namesfile names n remaining remaining_list msg warnfile
+  for meta in "$PHOTO_FLUSH_DIR"/*.meta; do
+    [ -f "$meta" ] || continue
+    IFS=$'\t' read -r g wa tgl < "$meta"
+    namesfile="${meta%.meta}.names"
+    names=$(paste -sd '§' "$namesfile" 2>/dev/null | sed 's/§/, /g')
+    n=$(grep -c '' "$namesfile" 2>/dev/null)
+    remaining=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$wa' AND tanggal = '$tgl' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
+    remaining_list=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$wa' AND tanggal = '$tgl' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
+    if [ "${n:-1}" -gt 1 ] 2>/dev/null; then
+      msg="✅ ${n} foto tersimpan: ${names}"
+    else
+      msg="✅ Foto ${names} tersimpan"
+    fi
+    if [ "${remaining:-0}" -gt 0 ] 2>/dev/null; then
+      msg="${msg}. Sisa ${remaining} customer belum ada foto:
+⚠️ ${remaining_list}"
+    else
+      msg="${msg}. ✅ Semua foto visit lengkap."
+    fi
+    warnfile="${meta%.meta}.warn"
+    if [ -f "$warnfile" ]; then
+      msg="${msg}
+$(cat "$warnfile")"
+    fi
+    wa_send "$g" "$msg"
+    log "  photo-followup flush: grp=$g wa=$wa tgl=$tgl saved=$n remaining=${remaining:-?}"
+  done
 }
 
 # ── Main loop ───────────────────────────────────────────────
@@ -1500,6 +1538,10 @@ DATES=("$(date '+%Y-%m-%d')" "$(date -v-1d '+%Y-%m-%d')")
 PROCESSED=0
 SKIPPED=0
 HASHTAG_HITS=0
+
+# Run-scoped buffer dir untuk coalescing reply photo-followup (lihat helper di atas).
+PHOTO_FLUSH_DIR=$(mktemp -d "${TMPDIR:-/tmp}/wrg_photoflush.XXXXXX")
+trap 'rm -rf "$PHOTO_FLUSH_DIR"' EXIT
 
 for D in "${DATES[@]}"; do
   DIR="$MESSAGES_DIR/$D"
@@ -1860,6 +1902,9 @@ Hubungi admin untuk mengaktifkan kembali."
     done < "$JSONL"
   done
 done
+
+# Kirim ringkasan photo-followup yang ke-buffer (satu pesan per AM per run).
+flush_photo_buffers
 
 # Save cursor
 echo "$NEW_CURSOR" > "$CURSOR_FILE"
