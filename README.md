@@ -24,29 +24,29 @@ masih bisa submit kalau mau, tapi gak dapat reminder. Toggle env via
 
 ### Per Orang — view utama
 
-![Dashboard per-orang dengan tren chart harian](docs/images/dashboard-main.png)
+![Dashboard per-orang dengan KPI, tren chart, dan tabel per-karyawan](docs/images/dashboard-main.png)
 
-KPI strip (7 metric), tren chart harian (Plan/Report/Late + weekend & holiday shading), tabel per-karyawan dengan role tag, plan/report count, % selesai bar, late, dan unmatched. Klik baris → drilldown.
+Layout redesign 2026 (sidebar Adminator: HR / SALES / ADMIN). Date-range picker (default minggu berjalan, preset Hari ini / Minggu ini). KPI strip 7 metric (Hari kerja, Karyawan wajib, Total Plan, Reported, Late, Aktivitas, Unmatched), reminder widget "belum report hari ini" (collapsible), tren chart harian, dan tabel per-karyawan (role tag, cabang, plan/report count, % selesai, late, unmatched). Klik baris → halaman drilldown.
 
 ### Tren Plan & Report harian
 
 ![Tren chart dengan 3 line series](docs/images/dashboard-trend.png)
 
-Line chart 3 series: Plan total (kunjungan + todo items, hijau), Report aktivitas (biru), Late submission (merah dashed). Vertical band abu-abu = weekend/libur nasional. Yellow dot di atas = holiday marker. Hari ini ditandai bold + hijau. Hover titik → tooltip detail.
+Line chart 3 series: Plan total (kunjungan + todo items, hijau), Report aktivitas (biru), Late submission (merah dashed). Weekend & libur nasional tampak sebagai lembah ke 0 (tidak ada hari kerja). Hover titik → tooltip detail.
 
 ### Per HOD Sales (East / West)
 
 ![Per HOD Sales tab — Rocky East vs Yogi West](docs/images/dashboard-hod.png)
 
-Agregasi khusus AM: grouping by HOD area via `master_territory` table. Berguna untuk compare performance Rocky (East: Bali/Madura/SBY 2/Kediri/Malang/NTB) vs Yogi (West: Cirebon/Lamongan/Madiun/Palembang/Solo & Yogya/Jember).
+Tab agregasi khusus AM: grouping by HOD area via `master_territory` table. Compare performance Rocky (East: Bali/Madura/SBY 2/Kediri/Malang/NTB) vs Yogi (West: Cirebon/Lamongan/Madiun/Palembang/Solo & Yogya/Jember) — jumlah AM, submit, plan, reported, % selesai, late, unmatched per HOD.
 
 ### Drilldown per orang
 
-![Modal drilldown untuk satu AM](docs/images/dashboard-drilldown.png)
+![Halaman detail Plan & Report satu AM](docs/images/dashboard-drilldown.png)
 
-Klik baris di tabel Per Orang → modal lengkap. Info user + Plan kunjungan (`sales_plan`) dengan status `reported` / `pending` / `late submit`, hasil + next action per customer, Todo list (`sales_todo`), dan Unmatched activity.
+Klik baris di tabel Per Orang → halaman detail (`/drilldown.html?user_id=`). Info user + Plan Kunjungan (`sales_plan`) dengan status `reported` / `pending` / `late submit`, hasil + next action per customer, kolom **Visit Geotag** (verifikasi lokasi foto AM), Todo list (`sales_todo`), dan Unmatched activity.
 
-> Screenshots di-generate dari `wrg_crm_dev` dengan demo data (`python3 scripts/seed_demo_data.py`). Nama karyawan asli, tapi plan/report numbers fake.
+> Screenshots di-generate dari `wrg_crm_dev` dengan demo data (`python3 scripts/seed_demo_data.py`, periode 4–22 Mei) lalu di-capture via `frontend/scripts/wrg-readme-shots.mjs` (Playwright + Chrome). Nama karyawan asli, tapi plan/report numbers fake.
 
 ---
 
