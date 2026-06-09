@@ -1,0 +1,14 @@
+#!/bin/bash
+# One-shot: send Geo-Tagging Camera coaching brief to The ALLIANCE group.
+# Auto-self-disable after fire (via launchctl unload).
+set -uo pipefail
+source /Users/development/Documents/wrg-crm/config/config.sh
+
+# WA-formatted message (manually adapted from docs/AM-GEOTAG-COACHING.md)
+MSG=$'📢 *Coaching AM — Geo-Tagging Camera (Day 2)*\n\nHasil Day 1: 79% plan reported, tapi cuma *2/77 foto yg ter-verifikasi geotag*. Mayoritas AM pakai app tanpa lat/lon di watermark.\n\n═════ 🎯 *Kenapa Geotag Penting* ═════\n\nFoto visit diverifikasi 3 cek:\n1. *Photo presence* — ada foto = visit ter-dokumentasi\n2. *Geotag (lat/lon)* — buktikan lokasi match customer\n3. *Tanggal foto* — match tanggal report (anti-backdate)\n\nWhatsApp *strip metadata EXIF GPS* otomatis. Solusi: app yg *burn lat/lon di pixel foto*.\n\n═════ 📱 *App Recommendation* ═════\n\n*#1 — Geo-Tagging Camera* (gratis, Android/iOS)\n• Play Store / App Store: cari "Geo-Tagging Camera"\n• Format watermark: `Lat -7.282302 Long 112.754749` + alamat + tanggal/jam\n\n*#2 — GPS Map Camera* (alternative, juga gratis)\n• Format watermark `-7,2823° 112,7547°` (bot handle dua-duanya)\n\n*Yang TIDAK Work:*\n❌ Kamera bawaan HP\n❌ App yg cuma tampilkan tanggal+altitude+compass (no lat/lon)\n❌ Screenshot dari Google Maps\n❌ Foto dari Gallery / WA Web\n\n*Cek*: foto lu harus ada teks `Lat <angka> Long <angka>` di sudut bawah. Kalau ga ada, *bukan yg benar*.\n\n═════ 📋 *Workflow Visit* ═════\n\n*Saat visit:*\n1. Buka *Geo-Tagging Camera* (bukan kamera biasa)\n2. Pastikan GPS HP ON\n3. Foto subjek (gedung, user lab, alat)\n4. Watermark di sudut harus terbaca jelas\n\n*Kirim ke grup WRG (sore):*\n1. Kirim *teks #REPORT dulu*:\n```\n#REPORT [Panggilan] 3/6/2026\n1. RS Foo\nHasil: meeting purchasing\nNext: tunggu PO\n\n2. RS Bar\n...\n```\n2. Bot reply confirm + list customer awaiting foto\n3. Kirim foto satu per satu dgn caption nama customer:\n```\n1. RS Foo\n```\n4. Bot reply per foto: matched + geotag check\n\nCaption boleh tanpa nomor (mis. `RS Foo`). Fuzzy match akan resolve.\n\n═════ ⚠️ *Common Mistakes Day 1* ═════\n\n• Pakai Solocator/app tanpa lat-long → ganti ke Geo-Tagging Camera\n• Foto dari gallery (WA strip EXIF) → pakai app yg burn coords saat ambil foto\n• Caption pakai huruf `l` bukan pipe `|` → format #PLAN harus pipe (caption foto cukup nama)\n• Foto tanggal kemarin → harus diambil hari yg sama dgn report\n• Skip #PLAN langsung #REPORT → wajib #PLAN dulu pagi sebelum 08:00\n\nTanya / report bug langsung WA Husni.'
+
+wa_send "120363405485256544@g.us" "$MSG"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] coaching brief sent to The ALLIANCE" >> /Users/development/Documents/wrg-crm/logs/cron.log
+
+# Self-unload: remove this launchd job after fire
+launchctl bootout gui/$(id -u)/ai.wrg-crm.send-geotag-brief 2>/dev/null
