@@ -1600,6 +1600,11 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
         if [ -n "$MEDIA_PATH" ] && [ -f "$MEDIA_PATH" ] && \
            [ -n "$MEDIA_TYPE" ] && [ "${MEDIA_TYPE#image/}" != "$MEDIA_TYPE" ]; then
           FIRST_LINE=$(echo "$BODY" | head -1)
+          # `<media:image>` is openclaw placeholder untuk media tanpa caption.
+          # Treat as no-caption — skip photo-followup trigger.
+          if [ "$FIRST_LINE" = "<media:image>" ]; then
+            FIRST_LINE=""
+          fi
           if echo "$FIRST_LINE" | grep -qE '^[[:space:]]*#?[[:space:]]*[0-9]+[.):]?'; then
             FOLLOWUP_HIT=1
           elif [ -n "$FIRST_LINE" ] && [ "${#FIRST_LINE}" -lt 100 ]; then
