@@ -1442,7 +1442,7 @@ print(line.strip())
   log "  #REPORT AM photo-followup ok: user=$USER_ID cust='$CUST_NAME' lat=$V_LAT lon=$V_LON mismatch=$V_MISMATCH"
 
   # Buffer save ini; konfirmasi + nag "sisa" dikirim sekali per AM di akhir run
-  # (flush_photo_buffers) supaya foto beruntun gak spam reply per foto.
+  # (flush_due_photo_buffers, debounce lintas-run) supaya foto beruntun gak spam.
   local MISMATCH_WARN=""
   if [ "$V_MISMATCH" = "TRUE" ]; then
     MISMATCH_WARN="⚠️ ${CUST_NAME}: tanggal foto $TS_DATE ≠ plan $TGL_ISO — pastikan foto diambil tanggal report."
@@ -1463,36 +1463,55 @@ handle_update() {
   return 0
 }
 
-# ── Photo-followup coalescing ───────────────────────────────
-# Foto beruntun dari satu AM (mis. kirim 5 foto sekaligus) sebelumnya bikin
-# 5 reply "Foto X tersimpan. Sisa N..." → spam. Buffer save per run poller,
-# kirim SATU ringkasan per (grup, AM, tanggal) di akhir run. Bash 3.2-safe
-# (temp files, bukan associative array). Catatan: coalescing per-run; foto yg
-# nyebrang batas poll 1-menit bisa jadi 2 ringkasan (tetap jauh lebih sedikit).
+# ── Photo-followup debounce (lintas-run) ────────────────────
+# Foto beruntun dari satu AM sebelumnya bikin satu reply "Foto X tersimpan.
+# Sisa N..." per foto → spam. Sekarang setiap save di-buffer ke state persisten
+# per (grup, AM, tanggal). Ringkasan SATU pesan baru dikirim setelah AM "diam"
+# >= PHOTO_QUIET_SECS (no foto baru) — debounce yang bertahan LINTAS RUN poller,
+# jadi burst yang nyebrang banyak poll 1-menit tetap 1 pesan. Force-flush kalau
+# pending sudah > PHOTO_MAX_PENDING_SECS (jaga-jaga AM ga pernah berhenti).
+# Bash 3.2-safe (temp files, bukan associative array).
+PHOTO_PENDING_DIR="$STATE_DIR/photo-pending"
+mkdir -p "$PHOTO_PENDING_DIR"
+PHOTO_QUIET_SECS=90          # diam segini → flush (1-2 poll setelah foto terakhir)
+PHOTO_MAX_PENDING_SECS=900   # cap: flush walau masih ada foto masuk terus
 
 buffer_photo_key() {
   printf '%s_%s_%s' "$1" "$2" "$3" | tr -c 'A-Za-z0-9' '_'
 }
 
 buffer_photo_save() {
-  local g="$1" wa="$2" tgl="$3" name="$4" warn="$5" key
+  local g="$1" wa="$2" tgl="$3" name="$4" warn="$5" key now base
   key=$(buffer_photo_key "$g" "$wa" "$tgl")
-  printf '%s\n' "$name" >> "$PHOTO_FLUSH_DIR/$key.names"
-  if [ ! -f "$PHOTO_FLUSH_DIR/$key.meta" ]; then
-    printf '%s\t%s\t%s\n' "$g" "$wa" "$tgl" > "$PHOTO_FLUSH_DIR/$key.meta"
+  base="$PHOTO_PENDING_DIR/$key"
+  now=$(date +%s)
+  printf '%s\n' "$name" >> "$base.names"
+  if [ ! -f "$base.meta" ]; then
+    printf '%s\t%s\t%s\n' "$g" "$wa" "$tgl" > "$base.meta"
+    printf '%s\n' "$now" > "$base.first"
   fi
-  [ -n "$warn" ] && printf '%s\n' "$warn" >> "$PHOTO_FLUSH_DIR/$key.warn"
+  printf '%s\n' "$now" > "$base.last"   # reset idle timer tiap foto baru
+  [ -n "$warn" ] && printf '%s\n' "$warn" >> "$base.warn"
 }
 
-flush_photo_buffers() {
-  [ -d "$PHOTO_FLUSH_DIR" ] || return 0
-  local meta g wa tgl namesfile names n remaining remaining_list msg warnfile
-  for meta in "$PHOTO_FLUSH_DIR"/*.meta; do
+# Flush hanya batch yang sudah diam >= QUIET (atau pending > MAX). Dipanggil tiap
+# akhir run; batch yang belum diam dibiarkan utk run berikutnya.
+flush_due_photo_buffers() {
+  [ -d "$PHOTO_PENDING_DIR" ] || return 0
+  local meta base g wa tgl names n remaining remaining_list msg now last first idle age
+  now=$(date +%s)
+  for meta in "$PHOTO_PENDING_DIR"/*.meta; do
     [ -f "$meta" ] || continue
+    base="${meta%.meta}"
+    last=$(cat "$base.last" 2>/dev/null); first=$(cat "$base.first" 2>/dev/null)
+    idle=$(( now - ${last:-0} )); age=$(( now - ${first:-0} ))
+    # Belum diam cukup lama DAN belum kelamaan pending → tunggu run berikutnya.
+    if [ "$idle" -lt "$PHOTO_QUIET_SECS" ] && [ "$age" -lt "$PHOTO_MAX_PENDING_SECS" ]; then
+      continue
+    fi
     IFS=$'\t' read -r g wa tgl < "$meta"
-    namesfile="${meta%.meta}.names"
-    names=$(paste -sd '§' "$namesfile" 2>/dev/null | sed 's/§/, /g')
-    n=$(grep -c '' "$namesfile" 2>/dev/null)
+    names=$(paste -sd '§' "$base.names" 2>/dev/null | sed 's/§/, /g')
+    n=$(grep -c '' "$base.names" 2>/dev/null)
     remaining=$($PSQL -c "SELECT COUNT(*) FROM activity_log WHERE sender_wa_number = '$wa' AND tanggal = '$tgl' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
     remaining_list=$($PSQL -c "SELECT string_agg(customer_name, ', ' ORDER BY id) FROM activity_log WHERE sender_wa_number = '$wa' AND tanggal = '$tgl' AND photo_path IS NULL AND plan_id IS NOT NULL;" 2>/dev/null | head -1)
     if [ "${n:-1}" -gt 1 ] 2>/dev/null; then
@@ -1506,13 +1525,13 @@ flush_photo_buffers() {
     else
       msg="${msg}. ✅ Semua foto visit lengkap."
     fi
-    warnfile="${meta%.meta}.warn"
-    if [ -f "$warnfile" ]; then
+    if [ -f "$base.warn" ]; then
       msg="${msg}
-$(cat "$warnfile")"
+$(cat "$base.warn")"
     fi
     wa_send "$g" "$msg"
-    log "  photo-followup flush: grp=$g wa=$wa tgl=$tgl saved=$n remaining=${remaining:-?}"
+    log "  photo-followup flush: grp=$g wa=$wa tgl=$tgl saved=$n idle=${idle}s age=${age}s remaining=${remaining:-?}"
+    rm -f "$base.names" "$base.meta" "$base.warn" "$base.first" "$base.last"
   done
 }
 
@@ -1538,10 +1557,6 @@ DATES=("$(date '+%Y-%m-%d')" "$(date -v-1d '+%Y-%m-%d')")
 PROCESSED=0
 SKIPPED=0
 HASHTAG_HITS=0
-
-# Run-scoped buffer dir untuk coalescing reply photo-followup (lihat helper di atas).
-PHOTO_FLUSH_DIR=$(mktemp -d "${TMPDIR:-/tmp}/wrg_photoflush.XXXXXX")
-trap 'rm -rf "$PHOTO_FLUSH_DIR"' EXIT
 
 for D in "${DATES[@]}"; do
   DIR="$MESSAGES_DIR/$D"
@@ -1903,8 +1918,8 @@ Hubungi admin untuk mengaktifkan kembali."
   done
 done
 
-# Kirim ringkasan photo-followup yang ke-buffer (satu pesan per AM per run).
-flush_photo_buffers
+# Flush ringkasan photo-followup yang sudah diam (debounce lintas-run).
+flush_due_photo_buffers
 
 # Save cursor
 echo "$NEW_CURSOR" > "$CURSOR_FILE"
