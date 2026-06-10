@@ -3,6 +3,11 @@ name: wrg-leads
 description: Parse #LEADS hashtag → insert ke pipeline_tracker (prospek baru)
 ---
 
+> 🚧 **STATUS: Phase 0 — BELUM DI-DEPLOY.** Spec desain, bukan handler aktif.
+> `scripts/wrg-inbound.sh` saat ini membalas "handler belum di-deploy" + status
+> `DEFERRED`. Catatan: dokumen ini merujuk tabel `master_data` yang **belum dibuat**
+> di schema — buat dulu saat implementasi, atau ganti target ke tabel yang ada.
+
 # wrg-leads
 **Trigger:** `/^#leads/i`  
 **Role:** Tambah prospek/customer baru ke master_data + pipeline_tracker  
