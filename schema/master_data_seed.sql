@@ -43,7 +43,7 @@ INSERT INTO master_user (wa_number, nama, panggilan, posisi, cabang, role, wajib
 ('6281332170240', 'Muhid',                       'Muhid',  'HOD Aftersales',            'Pusat', 'HOD', FALSE, TRUE),
 ('6281248476085', 'Ika Purwaningsari',           'Ika',    'HOD Finance & Supply Chain','Pusat', 'HOD', FALSE, TRUE),
 ('6281333029926', 'Nurul Fadhilah',              'Fafa',   'HOD Accounting',            'Pusat', 'HOD', FALSE, TRUE),
-('6281213255253', 'Rocky Gunawan',               'Rocky',  'HOD Sales East Area',       'Pusat', 'HOD', FALSE, TRUE),
+('6285704142027', 'Rocky Gunawan',               'Rocky',  'HOD Sales East Area',       'Pusat', 'HOD', FALSE, TRUE),
 ('6281330088773', 'Yogi Nugroho',                'Yogi',   'HOD Sales West Area',       'Pusat', 'HOD', FALSE, TRUE),
 
 -- ── AM (wajib plan/report + punya territory) ────────────────

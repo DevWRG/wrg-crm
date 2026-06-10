@@ -32,10 +32,21 @@ if [ -n "$IS_HOLIDAY" ]; then
 fi
 
 # --- Tentukan giliran berdasarkan parity tanggal ---
+# WHO_ID = master_user.id (Rocky=7, Yogi=8). WHO_SENDER = pushname di capture
+# (buat guard "sudah posting"), ga ada di master_user jadi tetap mapping manual.
 if [ $((DOM % 2)) -eq 0 ]; then
-  WHO="Rocky";  WHO_NUM="6281213255253"; WHO_SENDER="RG WG";        PARITY="genap"
+  WHO_ID=7;  WHO_SENDER="RG WG";        PARITY="genap"
 else
-  WHO="Yogi";   WHO_NUM="6281330088773"; WHO_SENDER="Yogi Nugroho"; PARITY="ganjil"
+  WHO_ID=8;  WHO_SENDER="Yogi Nugroho"; PARITY="ganjil"
+fi
+# wa_number + panggilan diambil RUNTIME dari master_user (single source of truth —
+# jangan hardcode; nomor bisa berubah, mis. Rocky 2026-06-10).
+WHO_ROW=$(psql -U "$PGUSER" -d "$PGDATABASE" -tA -F$'\t' \
+  -c "SELECT wa_number, COALESCE(panggilan, nama) FROM master_user WHERE id=$WHO_ID AND aktif;" 2>/dev/null | head -1)
+IFS=$'\t' read -r WHO_NUM WHO <<<"$WHO_ROW"
+if [ -z "$WHO_NUM" ]; then
+  log "  hod-reminder: gagal resolve wa_number master_user id=$WHO_ID — skip"
+  exit 0
 fi
 
 # --- Guard: skip kalau yg giliran sudah posting update hari ini ---
