@@ -205,6 +205,7 @@ Output: `exports/wrg-report-{from}_{to}-{timestamp}.pdf` (~660KB, 7 halaman).
 30 20 * * *   wrg-daily.sh report_check → reminder AM yg belum kirim report
 0  22 * * 1-5 wrg-daily.sh daily_summary → AI summary ke admin
 0  20 * * 1-5 cron_hod_daily_reminder.sh → reminder HOD giliran daily update (genap=Rocky/ganjil=Yogi, deadline 20:30)
+*/10 * * * *  detect_leave.sh            → auto-detect izin/sakit/cuti dari grup HRD via LLM + approval
 0   2 * * *   backup_pg.sh             → pg_dump nightly
 0   7 * * 1   cron_weekly_report.sh    → PDF mingguan + notif WA ke direksi
 ```

@@ -286,6 +286,9 @@ PATH=/opt/homebrew/bin:/opt/homebrew/opt/postgresql@16/bin:/usr/local/bin:/usr/b
 # HOD daily sales update reminder ke grup Koord HoD (giliran genap=Rocky/ganjil=Yogi, deadline 20:30)
 0   20  *  *  1-5 bash /Users/development/Documents/wrg-crm/scripts/cron_hod_daily_reminder.sh  >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 
+# Auto-detect izin/sakit/cuti dari grup HRD via LLM + approval (docs/AUTO-DETECT-LEAVE.md)
+*/10 *  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/detect_leave.sh             >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
+
 # Backup PG nightly
 0    2  *  *  *  bash /Users/development/Documents/wrg-crm/scripts/backup_pg.sh                >> /Users/development/Documents/wrg-crm/logs/cron.log 2>&1
 
