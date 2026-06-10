@@ -14,13 +14,19 @@ description: Schedule-only design spec (08:00 plan_check / 20:30 report_check / 
 
 | Waktu | Hari | Job |
 |---|---|---|
-| 08:00 WIB | Daily | `plan_check()` |
+| 08:15 WIB | Daily | `plan_check()` |
 | 20:30 WIB | Daily | `report_check()` |
 | 22:00 WIB | Senin–Jumat | `daily_summary()` |
 
+> **Deadline plan ≠ jam cron.** `plan_check` fire 08:15 sebagai *nudge*.
+> Ambang `is_late_plan` bersifat **per-role** (lihat `scripts/wrg-inbound.sh`):
+> • Lapangan (AM / Teknisi) → **08:00**
+> • Non-lapangan batch-1 (Operasional, Admin, Finance, dll) → **08:30**
+>   (extend dari 08:00 — usul Bu Ika, di-ack Husni saat rollout 2026-05-24)
+
 ---
 
-## JOB 1 — plan_check() [08:00 WIB]
+## JOB 1 — plan_check() [08:15 WIB — deadline per-role, lihat tabel di atas]
 
 ### Step 1 — Cek Hari Kerja
 ```sql

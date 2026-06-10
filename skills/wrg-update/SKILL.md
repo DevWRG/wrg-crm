@@ -3,6 +3,10 @@ name: wrg-update
 description: Parse #UPDATE hashtag → update status pipeline / deal_closed
 ---
 
+> 🚧 **STATUS: Phase 0 — BELUM DI-DEPLOY.** Spec desain, bukan handler aktif.
+> `scripts/wrg-inbound.sh` saat ini membalas "handler belum di-deploy" + status
+> `DEFERRED`.
+
 # wrg-update
 **Trigger:** `/^#update/i`  
 **Role:** Update stage/status/note pipeline tracker dengan fuzzy customer name  

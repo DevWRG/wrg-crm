@@ -76,7 +76,10 @@ Untuk setiap customer, normalisasi tujuan ke whitelist.
 ### Step 4 — Cek Late Plan
 ```
 submitted_at = NOW()
-is_late_plan = (tanggal == CURRENT_DATE AND TIME(NOW()) > '08:00:00')
+# Ambang per-role (lihat scripts/wrg-inbound.sh — runtime asli):
+#   lapangan (AM/Teknisi)                  → 08:00:00
+#   non-lapangan batch-1 (Operasional dll) → 08:30:00
+is_late_plan = (tanggal == CURRENT_DATE AND TIME(NOW()) > deadline_role)
 ```
 
 ### Step 5 — Insert ke Database

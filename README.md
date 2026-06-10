@@ -66,8 +66,8 @@ Klik baris di tabel Per Orang → halaman detail (`/drilldown.html?user_id=`). I
         │
         ├─▶ wrg-plan      → INSERT sales_plan / sales_todo
         ├─▶ wrg-report    → INSERT activity_log (fuzzy match ke plan via pg_trgm)
-        ├─▶ wrg-leads     → INSERT pipeline_tracker
-        └─▶ wrg-update    → UPDATE pipeline_tracker
+        ├─▶ wrg-leads     → INSERT pipeline_tracker      [🚧 Phase 0 — belum di-deploy]
+        └─▶ wrg-update    → UPDATE pipeline_tracker      [🚧 Phase 0 — belum di-deploy]
                                 │
                                 ▼
                        PostgreSQL  (wrg_crm_dev | wrg_crm_prod)
@@ -81,6 +81,13 @@ Klik baris di tabel Per Orang → halaman detail (`/drilldown.html?user_id=`). I
        WA reminder ke              PDF report + ringkasan KPI
        AM yg lupa submit           ke admin via WA
 ```
+
+> **Status handler (per 2026-06-10):** hanya **#PLAN** & **#REPORT** yang live di
+> produksi. **#LEADS** & **#UPDATE** masih stub Phase 0 — `scripts/wrg-inbound.sh`
+> membalas "🚧 handler belum di-deploy" dan menandai pesan `DEFERRED`. Tabel
+> `pipeline_tracker` / `deal_closed` sudah ada di schema (disiapkan), tapi belum diisi.
+> Runtime parser sebenarnya = `scripts/wrg-inbound.sh`; file `skills/*/SKILL.md`
+> adalah **spec desain**, bukan kode yang dieksekusi openclaw.
 
 ---
 
