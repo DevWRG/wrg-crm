@@ -1663,21 +1663,8 @@ sys.stdout.write(PATTERN.sub("", sys.stdin.read()))
         # ke individual phone).
         EFFECTIVE_WA="$WA_NUM"
         if [ "$SENDER_IS_GROUP" = "1" ] && [ -n "$SENDER_NAME" ]; then
-          SAFE_PUSH=$(echo "$SENDER_NAME" | sed "s/'/''/g")
-          RESOLVED_WA=$($PSQL -c "
-            WITH p AS (
-              SELECT regexp_replace(LOWER('$SAFE_PUSH'), '[^a-z]', '', 'g') AS norm
-            )
-            SELECT wa_number FROM master_user, p
-            WHERE LOWER(nama) = LOWER('$SAFE_PUSH')
-               OR LOWER(panggilan) = LOWER('$SAFE_PUSH')
-               OR LOWER(nama) LIKE LOWER('$SAFE_PUSH') || ' %'
-               OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_PUSH', ' ', 1))
-               OR LOWER(panggilan) = LOWER(regexp_replace('$SAFE_PUSH', '[_|/\\\\\\-\\s].*\$', ''))
-               OR (LENGTH(p.norm) >= 5 AND regexp_replace(LOWER(nama), '[^a-z]', '', 'g') LIKE p.norm || '%')
-               OR (LENGTH(p.norm) >= 5 AND p.norm LIKE regexp_replace(LOWER(nama), '[^a-z]', '', 'g') || '%')
-            ORDER BY LENGTH(nama) LIMIT 1;
-          " 2>/dev/null | head -1)
+          # Shared resolver (config.sh) — handle pushname disingkat/nyambung/suffix.
+          RESOLVED_WA=$(resolve_user_by_pushname "$SENDER_NAME" | cut -f2)
           [ -n "$RESOLVED_WA" ] && EFFECTIVE_WA="$RESOLVED_WA"
         fi
         if [ -n "$MEDIA_PATH" ] && [ -f "$MEDIA_PATH" ] && \
@@ -1806,42 +1793,15 @@ print(' UNION ALL '.join(parts))
         fi
       fi
 
-      # Tier C: sender pushname (nama/panggilan match, 5 sub-tiers).
-      # Pushname often has suffix like "Arif_Official", "IRUL|PT WAHANA GUMILANG",
-      # "John-Smith" — strip after first separator (_|/-\s) to extract first
-      # token, lalu match panggilan.
+      # Tier C: sender pushname → resolve via shared resolver (config.sh).
+      # Handle suffix ("Arif_Official"), nyambung ("Vickyadi"), nama disingkat
+      # ("M. Wildha Saputra" → panggilan whole-word). Single source — jangan
+      # duplikat query (sebelumnya 3 copy divergen).
       if [ -z "$USER_ROW" ] && [ -n "$SENDER_NAME" ]; then
-        SAFE_NAME=$(echo "$SENDER_NAME" | sed "s/'/''/g")
-        # CTE p.norm = pushname di-strip ke huruf saja → match pushname nyambung
-        # tanpa spasi/separator (mis. "Vickyadi" → "Vicky Adi Nugroho"). Mirror
-        # resolver photo-followup; sebelumnya cuma di sana, bikin #REPORT Vicky
-        # gagal auth 2026-06-09.
-        USER_ROW=$($PSQL -c "
-          WITH p AS (SELECT regexp_replace(LOWER('$SAFE_NAME'), '[^a-z]', '', 'g') AS norm)
-          SELECT id || E'\t' || COALESCE(nama,'') || E'\t' ||
-                 CASE WHEN aktif THEN 't' ELSE 'f' END
-          FROM master_user, p
-          WHERE LOWER(nama) = LOWER('$SAFE_NAME')
-             OR LOWER(panggilan) = LOWER('$SAFE_NAME')
-             OR LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'
-             OR LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))
-             OR LOWER(panggilan) = LOWER(regexp_replace('$SAFE_NAME', '[_|/\\\\\\-\\s].*\$', ''))
-             OR (LENGTH(p.norm) >= 5 AND regexp_replace(LOWER(nama), '[^a-z]', '', 'g') LIKE p.norm || '%')
-             OR (LENGTH(p.norm) >= 5 AND p.norm LIKE regexp_replace(LOWER(nama), '[^a-z]', '', 'g') || '%')
-          ORDER BY
-            CASE
-              WHEN LOWER(nama)      = LOWER('$SAFE_NAME')                          THEN 1
-              WHEN LOWER(panggilan) = LOWER('$SAFE_NAME')                          THEN 2
-              WHEN LOWER(nama) LIKE LOWER('$SAFE_NAME') || ' %'                    THEN 3
-              WHEN LOWER(panggilan) = LOWER(SPLIT_PART('$SAFE_NAME', ' ', 1))      THEN 4
-              WHEN LOWER(panggilan) = LOWER(regexp_replace('$SAFE_NAME', '[_|/\\\\\\-\\s].*\$', '')) THEN 5
-              ELSE 6
-            END,
-            LENGTH(nama)
-          LIMIT 1;
-        " 2>/dev/null | head -1)
-        if [ -n "$USER_ROW" ]; then
-          RESOLVED_ID=$(echo "$USER_ROW" | cut -f1)
+        RESOLVED=$(resolve_user_by_pushname "$SENDER_NAME")
+        if [ -n "$RESOLVED" ]; then
+          USER_ROW=$(printf '%s' "$RESOLVED" | cut -f1,3,5)   # id, nama, aktif
+          RESOLVED_ID=$(printf '%s' "$RESOLVED" | cut -f1)
           $PSQL -c "UPDATE master_user SET last_active_group = '$GROUP_JID', last_active_at = NOW() WHERE id = $RESOLVED_ID;" >/dev/null 2>>"$LOG_DIR/daily.log"
           log "  matched via sender_name: '$SENDER_NAME' → id=$RESOLVED_ID"
         fi

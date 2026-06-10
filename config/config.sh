@@ -73,6 +73,48 @@ log() {
 
 # ── Helpers ──────────────────────────────────────────────────
 
+# Resolve WA pushname/display-name → master_user (SINGLE SOURCE — dipakai
+# photo-followup, tier-C #REPORT auth, detect_leave. Jangan duplikat query).
+# Args: $1=pushname/nama, $2=wajib_only (1=hanya wajib_plan_report; default 0).
+# Echo: "id<TAB>wa_number<TAB>nama<TAB>panggilan<TAB>aktif(t/f)" (best match) / kosong.
+# Sub-tier match (prioritas turun): nama/panggilan exact → nama prefix →
+# first-token → strip-separator → panggilan sbg whole-word di pushname
+# (handle "M. Wildha Saputra" → "Wildha") → normalized prefix (handle "Vickyadi").
+resolve_user_by_pushname() {
+  local raw="$1" wajib="${2:-0}" safe wclause=""
+  safe=$(printf '%s' "$raw" | sed "s/'/''/g")
+  [ "$wajib" = "1" ] && wclause="AND wajib_plan_report"
+  $PSQL -c "
+    WITH p AS (
+      SELECT regexp_replace(LOWER('$safe'),'[^a-z]','','g') AS norm,
+             ' '||regexp_replace(LOWER('$safe'),'[^a-z ]','','g')||' ' AS words
+    )
+    SELECT id || E'\t' || COALESCE(wa_number,'') || E'\t' || COALESCE(nama,'') || E'\t' || COALESCE(panggilan,'') || E'\t' || (CASE WHEN aktif THEN 't' ELSE 'f' END)
+    FROM master_user m, p
+    WHERE TRUE $wclause AND (
+         LOWER(nama) = LOWER('$safe')
+      OR LOWER(panggilan) = LOWER('$safe')
+      OR LOWER(nama) LIKE LOWER('$safe') || ' %'
+      OR LOWER(panggilan) = LOWER(SPLIT_PART('$safe',' ',1))
+      OR LOWER(panggilan) = regexp_replace(LOWER('$safe'), '[_|/\\\\\\-\\s].*\$', '')
+      OR (LENGTH(panggilan) >= 3 AND p.words LIKE '% '||LOWER(panggilan)||' %')
+      OR (LENGTH(p.norm) >= 4 AND regexp_replace(LOWER(nama),'[^a-z]','','g') LIKE p.norm || '%')
+      OR (LENGTH(p.norm) >= 4 AND p.norm LIKE regexp_replace(LOWER(panggilan),'[^a-z]','','g') || '%')
+    )
+    ORDER BY aktif DESC,
+      CASE
+        WHEN LOWER(nama) = LOWER('$safe') THEN 1
+        WHEN LOWER(panggilan) = LOWER('$safe') THEN 2
+        WHEN LOWER(nama) LIKE LOWER('$safe') || ' %' THEN 3
+        WHEN LOWER(panggilan) = LOWER(SPLIT_PART('$safe',' ',1)) THEN 4
+        WHEN LOWER(panggilan) = regexp_replace(LOWER('$safe'),'[_|/\\\\\\-\\s].*\$','') THEN 5
+        WHEN LENGTH(panggilan) >= 3 AND p.words LIKE '% '||LOWER(panggilan)||' %' THEN 6
+        ELSE 7
+      END, LENGTH(nama)
+    LIMIT 1;
+  " 2>/dev/null | head -1
+}
+
 # Send WhatsApp message via openclaw.
 # Args: $1=target (group JID atau +E.164), $2=message body.
 wa_send() {

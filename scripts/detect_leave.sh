@@ -40,25 +40,9 @@ mark_processed() {  # mid wa hashtag status
             >/dev/null 2>>"$LOG_DIR/daily.log"
 }
 
-# Resolve nama → user_id WAJIB (fuzzy). Echo "id<TAB>nama" atau kosong.
+# Resolve nama → "id<TAB>nama" (WAJIB only). Wrapper ke resolver shared (config.sh).
 resolve_user() {
-  local raw="$1" safe
-  safe=$(printf '%s' "$raw" | sed "s/'/''/g")
-  $PSQL -c "
-    WITH p AS (SELECT regexp_replace(LOWER('$safe'),'[^a-z]','','g') AS norm)
-    SELECT id || E'\t' || nama
-    FROM master_user, p
-    WHERE wajib_plan_report AND aktif AND (
-         LOWER(panggilan)=LOWER('$safe')
-      OR LOWER(nama)=LOWER('$safe')
-      OR LOWER(nama) LIKE LOWER('$safe')||' %'
-      OR LOWER(panggilan)=LOWER(SPLIT_PART('$safe',' ',1))
-      OR (LENGTH(p.norm)>=4 AND regexp_replace(LOWER(nama),'[^a-z]','','g') LIKE p.norm||'%')
-      OR (LENGTH(p.norm)>=4 AND p.norm LIKE regexp_replace(LOWER(panggilan),'[^a-z]','','g')||'%')
-    )
-    ORDER BY CASE WHEN LOWER(panggilan)=LOWER('$safe') THEN 1
-                  WHEN LOWER(nama)=LOWER('$safe') THEN 2 ELSE 3 END, LENGTH(nama)
-    LIMIT 1;" 2>/dev/null | head -1
+  resolve_user_by_pushname "$1" 1 | cut -f1,3
 }
 
 SYS='You parse a single WhatsApp message from an Indonesian company HR group and decide if it announces that a SPECIFIC employee will be ABSENT from work (izin/sakit/cuti).
