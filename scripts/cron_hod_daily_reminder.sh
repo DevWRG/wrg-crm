@@ -53,10 +53,11 @@ fi
 CAP="$HOME/.openclaw/tmp/wrg-monitor/messages/$TODAY_ISO/${GROUP_JID}.jsonl"
 if [ -f "$CAP" ]; then
   ALREADY="$(python3 - "$CAP" "$WHO_SENDER" "$DD_MM" "$DDMMYYYY" <<'PY'
-import sys, json, re
+import sys, json
 cap, sender, dd_mm, ddmmyyyy = sys.argv[1:5]
 # normalisasi tanggal target -> set string yg dianggap "update hari ini"
 targets = {dd_mm, ddmmyyyy, ddmmyyyy.lstrip("0")}
+MEDIA_KW = ("image", "video", "document", "pdf", "presentation", "spreadsheet", "sheet", "word")
 hit = False
 try:
     with open(cap) as f:
@@ -67,15 +68,16 @@ try:
             r = json.loads(line)
             if r.get("sender_name") != sender:
                 continue
+            # (a) Foto/dokumen dari yg giliran -> dianggap sudah share update
+            #     (daily update sering foto/pptx tanpa caption "update <tgl>").
+            mt = (r.get("media_type") or "").lower()
+            if any(k in mt for k in MEDIA_KW):
+                hit = True
+                break
+            # (b) atau teks "update" + tanggal hari ini (dd/mm atau dd/mm/yyyy)
             body = (r.get("body") or "").lower()
-            if "update" not in body:
-                continue
-            # cocokkan tanggal hari ini di body (dd/mm atau dd/mm/yyyy)
-            for t in targets:
-                if t and t.lower() in body:
-                    hit = True
-                    break
-            if hit:
+            if "update" in body and any(t and t.lower() in body for t in targets):
+                hit = True
                 break
 except FileNotFoundError:
     pass
@@ -83,7 +85,7 @@ print("1" if hit else "0")
 PY
 )"
   if [ "$ALREADY" = "1" ]; then
-    log "  hod-reminder: $WHO sudah posting update $DDMMYYYY — skip"
+    log "  hod-reminder: $WHO sudah posting update (foto/dok/teks) $DDMMYYYY — skip"
     exit 0
   fi
 fi
